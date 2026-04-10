@@ -32,11 +32,44 @@ def format_add_data(source: Path, destination: str) -> str:
     return f"{source}{os.pathsep}{destination}"
 
 
+def get_add_data_entries(repo_root: Path) -> list[tuple[Path, str]]:
+    """Return filesystem paths that must be available to the frozen runtime."""
+    return [
+        (repo_root / "holodeck", "holodeck"),
+    ]
+
+
+def build_pyinstaller_command(repo_root: Path, pyinstaller: Path, dist_dir: Path, build_dir: Path) -> list[str]:
+    """Construct the PyInstaller command for the Holodeck CLI executable."""
+    entrypoint = repo_root / "scripts" / "run_holodeck.py"
+    command = [
+        str(pyinstaller),
+        "--noconfirm",
+        "--clean",
+        "--onefile",
+        "--name",
+        "holodeck",
+        "--distpath",
+        str(dist_dir),
+        "--workpath",
+        str(build_dir / "work"),
+        "--specpath",
+        str(build_dir / "spec"),
+        "--paths",
+        str(repo_root),
+    ]
+
+    for source, destination in get_add_data_entries(repo_root):
+        command.extend(["--add-data", format_add_data(source, destination)])
+
+    command.append(str(entrypoint))
+    return command
+
+
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     dist_dir = repo_root / "dist"
     build_dir = repo_root / "build" / "pyinstaller"
-    entrypoint = repo_root / "scripts" / "run_holodeck.py"
     pyinstaller = get_pyinstaller_executable()
 
     shutil.rmtree(build_dir, ignore_errors=True)
@@ -44,30 +77,7 @@ def main() -> None:
     (dist_dir / "holodeck.exe").unlink(missing_ok=True)
 
     subprocess.run(
-        [
-            str(pyinstaller),
-            "--noconfirm",
-            "--clean",
-            "--onefile",
-            "--name",
-            "holodeck",
-            "--distpath",
-            str(dist_dir),
-            "--workpath",
-            str(build_dir / "work"),
-            "--specpath",
-            str(build_dir / "spec"),
-            "--paths",
-            str(repo_root),
-            "--add-data",
-            format_add_data(repo_root / "holodeck" / "resources", "holodeck/resources"),
-            "--add-data",
-            format_add_data(
-                repo_root / "holodeck" / "blender_scripts",
-                "holodeck/blender_scripts",
-            ),
-            str(entrypoint),
-        ],
+        build_pyinstaller_command(repo_root, pyinstaller, dist_dir, build_dir),
         check=True,
     )
 
