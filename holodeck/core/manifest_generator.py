@@ -66,13 +66,67 @@ class ManifestGenerator:
             "markers": markers,
             "frames": self._relativize_paths(self.frames, root_dir=root_dir),
         }
-        manifest["token"] = self._build_token(manifest)
+        manifest["token"] = self._build_token(manifest, root_dir=root_dir)
         return manifest
 
-    def _build_token(self, manifest: Dict[str, Any]) -> str:
-        """Build a stable token that changes whenever manifest content changes."""
-        token_payload = json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    def _build_token(
+        self,
+        manifest: Dict[str, Any],
+        root_dir: Optional[Path] = None,
+    ) -> str:
+        """Build a stable token that changes whenever the manifest or rendered files change."""
+        token_source = {
+            "manifest": manifest,
+            "frame_fingerprints": self._build_frame_fingerprints(
+                manifest["frames"],
+                root_dir=root_dir,
+            ),
+        }
+        token_payload = json.dumps(token_source, separators=(",", ":"), sort_keys=True).encode("utf-8")
         return hashlib.sha256(token_payload).hexdigest()[:12]
+
+    def _build_frame_fingerprints(
+        self,
+        frame_paths: List[str],
+        root_dir: Optional[Path] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Capture lightweight file metadata for cache busting.
+
+        The player serves frame URLs as immutable for aggressive browser caching, so
+        the manifest token must change when a frame is overwritten in place.
+        """
+        fingerprints = []
+        resolved_root = root_dir.resolve() if root_dir else None
+
+        for frame_path in frame_paths:
+            candidate_path = self._resolve_frame_path(frame_path, resolved_root)
+            fingerprint: Dict[str, Any] = {"path": frame_path}
+
+            if candidate_path is not None:
+                try:
+                    stat = candidate_path.stat()
+                except OSError:
+                    pass
+                else:
+                    fingerprint["size"] = stat.st_size
+                    fingerprint["mtime_ns"] = stat.st_mtime_ns
+
+            fingerprints.append(fingerprint)
+
+        return fingerprints
+
+    def _resolve_frame_path(
+        self,
+        frame_path: str,
+        root_dir: Optional[Path] = None,
+    ) -> Optional[Path]:
+        path = Path(frame_path)
+        if path.is_absolute():
+            return path
+        if root_dir is not None:
+            return root_dir / path
+        return None
 
     def _relativize_paths(
         self,

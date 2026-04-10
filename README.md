@@ -42,6 +42,7 @@ Holodeck reads the active scene's frame range, fps, and timeline markers from Bl
 - `docs/`: generated local demo output for previewing `demo.blend`
 - `tests/`: pytest coverage for core logic and CLI behavior
 - `tests/fixtures/blends/`: Blender fixtures for render override integration tests
+- `tests/fixtures/renders/demo/`: tracked pre-rendered demo frames used by CI and Pages refresh steps
 - `demo.blend`: sample Blender source file
 
 ## Quick Start
@@ -124,4 +125,4 @@ make build-pex
 - `make serve-demo`: serve `docs/` on port `8000` using `dist/holodeck`
 - `make clean`: remove the virtualenv and Python cache files
 
-`holodeck-player/` is the canonical source for the browser player. Local source-tree exports read from it directly, `make build` refreshes the packaged copy used for distributable binaries, and GitHub Pages deploys a freshly generated site artifact from CI instead of serving checked-in `docs/` files.
+`holodeck-player/` is the canonical source for the browser player. Local source-tree exports read from it directly, `make build` refreshes the packaged copy used for distributable binaries, and GitHub Pages publishes a CI-generated artifact assembled from tracked demo frames plus `holodeck refresh` instead of serving checked-in `docs/` files.

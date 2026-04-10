@@ -93,6 +93,28 @@ class TestManifestGenerator:
 
         assert first_manifest["token"] != second_manifest["token"]
 
+    def test_generate_manifest_token_changes_when_frame_file_changes(self, tmp_path):
+        frame_path = tmp_path / "render" / "0001.png"
+        frame_path.parent.mkdir()
+        frame_path.write_bytes(b"frame-v1")
+        self.generator.add_frame(str(frame_path))
+
+        first_manifest = self.generator.generate_manifest(
+            fps=24,
+            markers=[],
+            root_dir=tmp_path,
+        )
+
+        frame_path.write_bytes(b"frame-v2")
+
+        second_manifest = self.generator.generate_manifest(
+            fps=24,
+            markers=[],
+            root_dir=tmp_path,
+        )
+
+        assert first_manifest["token"] != second_manifest["token"]
+
     def test_relativize_paths_strips_prefix(self):
         """Test that absolute paths are relativized to the export root."""
         self.generator.add_frame("/Users/james/project/render/0001.png")

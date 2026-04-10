@@ -64,22 +64,34 @@ jobs:
       - name: Build standalone executable
         run: make build
 
-      - name: Validate executable commands with demo.blend
+      - name: Validate executable commands with fixtures
         run: |
           set -euxo pipefail
 
+          demo_refresh_dir="$RUNNER_TEMP/holodeck-demo-refresh"
+          fixture_blend="tests/fixtures/blends/named_png_output.blend"
           render_dir="$RUNNER_TEMP/holodeck-render"
           build_dir="$RUNNER_TEMP/holodeck-build"
           blender_bin="$RUNNER_TEMP/blender/blender"
 
-          ./dist/holodeck render-frames demo.blend "$render_dir" --blender "$blender_bin"
+          mkdir -p "$demo_refresh_dir"
+          cp -R tests/fixtures/renders/demo "$demo_refresh_dir/render"
+
+          ./dist/holodeck refresh demo.blend "$demo_refresh_dir" --blender "$blender_bin"
+          test -f "$demo_refresh_dir/index.html"
+          test -f "$demo_refresh_dir/player.js"
+          test -f "$demo_refresh_dir/styles.css"
+          test -f "$demo_refresh_dir/manifest.json"
+          find "$demo_refresh_dir/render" -type f | grep -q .
+
+          ./dist/holodeck render-frames "$fixture_blend" "$render_dir" --blender "$blender_bin"
           test -f "$render_dir/index.html"
           test -f "$render_dir/player.js"
           test -f "$render_dir/styles.css"
           test ! -f "$render_dir/manifest.json"
           find "$render_dir/render" -type f | grep -q .
 
-          ./dist/holodeck gen-manifest demo.blend "$render_dir" --blender "$blender_bin"
+          ./dist/holodeck refresh "$fixture_blend" "$render_dir" --blender "$blender_bin"
           test -f "$render_dir/manifest.json"
 
           python3 - <<'PY' "$render_dir/manifest.json"
@@ -94,7 +106,7 @@ jobs:
           assert len(data["markers"]) > 0
           PY
 
-          ./dist/holodeck build demo.blend "$build_dir" --blender "$blender_bin"
+          ./dist/holodeck build "$fixture_blend" "$build_dir" --blender "$blender_bin"
           test -f "$build_dir/manifest.json"
           test -f "$build_dir/index.html"
           find "$build_dir/render" -type f | grep -q .

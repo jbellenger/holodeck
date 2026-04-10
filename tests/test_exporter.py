@@ -1,4 +1,5 @@
 """Tests for shared Holodeck export helpers."""
+import time
 from pathlib import Path
 
 from holodeck.core import (
@@ -86,3 +87,31 @@ class TestWriteManifestFromFrames:
         assert manifest_path.exists()
         assert manifest["frames"] == ["render/0001.png", "render/0002.png"]
         assert "token" in manifest
+
+    def test_build_manifest_from_frames_token_changes_when_frame_is_overwritten(self, tmp_path):
+        export_root = tmp_path / "artifact"
+        render_dir = export_root / "render"
+        render_dir.mkdir(parents=True)
+        frame_path = render_dir / "0001.png"
+        frame_path.write_bytes(b"frame-v1")
+
+        first_manifest = build_manifest_from_frames(
+            frame_paths=[str(frame_path)],
+            fps=24,
+            marker_frames=[1],
+            frame_start=1,
+            export_root=export_root,
+        )
+
+        time.sleep(0.001)
+        frame_path.write_bytes(b"frame-v2")
+
+        second_manifest = build_manifest_from_frames(
+            frame_paths=[str(frame_path)],
+            fps=24,
+            marker_frames=[1],
+            frame_start=1,
+            export_root=export_root,
+        )
+
+        assert first_manifest["token"] != second_manifest["token"]

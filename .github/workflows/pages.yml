@@ -48,7 +48,9 @@ jobs:
           blender_bin="$RUNNER_TEMP/blender/blender"
 
           rm -rf "$site_dir"
-          ./holodeck-venv/bin/python -m holodeck build demo.blend "$site_dir" --blender "$blender_bin"
+          mkdir -p "$site_dir"
+          cp -R tests/fixtures/renders/demo "$site_dir/render"
+          ./holodeck-venv/bin/python -m holodeck refresh demo.blend "$site_dir" --blender "$blender_bin"
           touch "$site_dir/.nojekyll"
 
       - name: Configure GitHub Pages
