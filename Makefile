@@ -1,9 +1,12 @@
-.PHONY: test test-one setup clean build build-pyinstaller build-pex build-demo serve-demo regen-blend-fixtures sync-player-assets
+.PHONY: test test-one setup clean build build-pyinstaller build-pex build-demo serve-demo regen-blend-fixtures
 
 VENV := holodeck-venv
 PYTHON := $(VENV)/bin/python
 PYTEST := $(PYTHON) -m pytest
 BLENDER ?= blender
+DEMO_DIR ?= demo
+DEMO_BLEND := $(DEMO_DIR)/demo.blend
+DEMO_RENDER := $(DEMO_DIR)/render
 DEMO_OUTPUT ?= docs
 PORT ?= 8000
 
@@ -42,21 +45,20 @@ build-pex:
 	rm -f dist/holodeck.pex
 	$(MAKE) dist/holodeck.pex
 
-sync-player-assets:
-	python3 scripts/sync_player_assets.py
-
-dist/holodeck: sync-player-assets
+dist/holodeck:
 	$(PYTHON) -m pip install -q -e .[build]
 	$(PYTHON) scripts/build_executable.py
 
-dist/holodeck.pex: sync-player-assets
+dist/holodeck.pex:
 	$(PYTHON) -m pip install -q -e .[build]
 	$(PYTHON) scripts/build_pex.py
 
-# Regenerate the local demo bundle from demo.blend
+# Regenerate the local demo bundle from demo assets
 build-demo: dist/holodeck
 	rm -rf $(DEMO_OUTPUT)
-	./dist/holodeck build demo.blend $(DEMO_OUTPUT) --blender $(BLENDER)
+	mkdir -p $(DEMO_OUTPUT)
+	cp -R $(DEMO_RENDER) $(DEMO_OUTPUT)/render
+	./dist/holodeck refresh $(DEMO_BLEND) $(DEMO_OUTPUT) --blender $(BLENDER)
 	touch $(DEMO_OUTPUT)/.nojekyll
 
 # Start the presentation server for the local demo bundle

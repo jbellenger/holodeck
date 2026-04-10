@@ -193,28 +193,12 @@ class TestDeployPlayer:
         assert resources.exists()
         assert (resources / "index.html").exists()
 
-    def test_resources_dir_prefers_canonical_player_directory(self, tmp_path, monkeypatch):
-        package_root = tmp_path / "repo" / "holodeck"
-        package_root.mkdir(parents=True)
-        canonical_player_dir = package_root.parent / "holodeck-player"
-        canonical_player_dir.mkdir()
-        (canonical_player_dir / "index.html").write_text("<html></html>")
-
-        monkeypatch.setattr("holodeck.core.server.get_package_root", lambda: package_root)
-        monkeypatch.setattr(
-            "holodeck.core.server.get_package_path",
-            lambda *parts: package_root.joinpath(*parts),
-        )
-
-        assert get_resources_dir() == canonical_player_dir
-
-    def test_resources_dir_falls_back_to_packaged_resources(self, tmp_path, monkeypatch):
+    def test_resources_dir_returns_packaged_resources(self, tmp_path, monkeypatch):
         package_root = tmp_path / "repo" / "holodeck"
         resources_dir = package_root / "resources"
         resources_dir.mkdir(parents=True)
         (resources_dir / "index.html").write_text("<html></html>")
 
-        monkeypatch.setattr("holodeck.core.server.get_package_root", lambda: package_root)
         monkeypatch.setattr(
             "holodeck.core.server.get_package_path",
             lambda *parts: package_root.joinpath(*parts),

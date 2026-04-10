@@ -75,9 +75,9 @@ jobs:
           blender_bin="$RUNNER_TEMP/blender/blender"
 
           mkdir -p "$demo_refresh_dir"
-          cp -R tests/fixtures/renders/demo "$demo_refresh_dir/render"
+          cp -R demo/render "$demo_refresh_dir/render"
 
-          ./dist/holodeck refresh demo.blend "$demo_refresh_dir" --blender "$blender_bin"
+          ./dist/holodeck refresh demo/demo.blend "$demo_refresh_dir" --blender "$blender_bin"
           test -f "$demo_refresh_dir/index.html"
           test -f "$demo_refresh_dir/player.js"
           test -f "$demo_refresh_dir/styles.css"

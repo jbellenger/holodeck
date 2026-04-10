@@ -11,7 +11,7 @@ Holodeck uses Blender frame markers (default blender key-binding: <kbd>M</kbd>) 
 To turn a `.blend` file into something you can upload to a static host, run:
 
 ```bash
-holodeck build demo.blend dist/demo
+holodeck build demo/demo.blend dist/demo
 ```
 
 That creates `dist/demo`, which you can upload to GitHub Pages, S3, or any other static host. To preview the same directory locally, run:
@@ -37,13 +37,11 @@ Holodeck reads the active scene's frame range, fps, and timeline markers from Bl
 
 - `holodeck/`: Python package and CLI entrypoint
 - `holodeck/core/`: testable logic for Blender invocation, manifest generation, and serving
-- `holodeck-player/`: canonical browser player source files
-- `holodeck/resources/`: packaged copies of `holodeck-player/` for distributable builds
-- `docs/`: generated local demo output for previewing `demo.blend`
+- `holodeck/resources/`: browser player assets bundled with the package and used for local exports, static hosting, and distributable builds
+- `demo/`: canonical demo source files, including `demo.blend` and tracked rendered frames
+- `docs/`: generated local demo output built from `demo/`
 - `tests/`: pytest coverage for core logic and CLI behavior
 - `tests/fixtures/blends/`: Blender fixtures for render override integration tests
-- `tests/fixtures/renders/demo/`: tracked pre-rendered demo frames used by CI and Pages refresh steps
-- `demo.blend`: sample Blender source file
 
 ## Quick Start
 
@@ -64,7 +62,7 @@ That produces both `dist/holodeck` (PyInstaller) and `dist/holodeck.pex` (PEX).
 3. Build an export from a `.blend` file:
 
 ```bash
-./dist/holodeck build demo.blend dist/demo
+./dist/holodeck build demo/demo.blend dist/demo
 ```
 
 4. Serve it locally:
@@ -76,8 +74,8 @@ That produces both `dist/holodeck` (PyInstaller) and `dist/holodeck.pex` (PEX).
 ## CLI Commands
 
 ```bash
-holodeck build demo.blend dist/demo
-holodeck refresh demo.blend dist/demo
+holodeck build demo/demo.blend dist/demo
+holodeck refresh demo/demo.blend dist/demo
 holodeck serve dist/demo --port 8000
 holodeck serve dist/demo --no-open
 ```
@@ -119,10 +117,9 @@ make build-pex
 - `make build`: produce both `dist/holodeck` and `dist/holodeck.pex`
 - `make build-pyinstaller`: produce the standalone `dist/holodeck` binary with PyInstaller
 - `make build-pex`: produce the standalone `dist/holodeck.pex` executable with PEX
-- `make sync-player-assets`: refresh the packaged `holodeck/resources/` player files from `holodeck-player/`
-- `make build-demo`: regenerate the local `docs/` demo bundle from `demo.blend`
+- `make build-demo`: rebuild `docs/` from `demo/demo.blend` and `demo/render/`
 - `make regen-blend-fixtures`: rebuild the tracked Blender test fixtures
 - `make serve-demo`: serve `docs/` on port `8000` using `dist/holodeck`
 - `make clean`: remove the virtualenv and Python cache files
 
-`holodeck-player/` is the canonical source for the browser player. Local source-tree exports read from it directly, `make build` refreshes the packaged copy used for distributable binaries, and GitHub Pages publishes a CI-generated artifact assembled from tracked demo frames plus `holodeck refresh` instead of serving checked-in `docs/` files.
+`holodeck/resources/` is the canonical source for the browser player. Local source-tree exports, packaged builds, and distributable binaries all read from the same asset directory. GitHub Pages publishes a CI-generated artifact assembled from `demo/render/` plus `holodeck refresh` instead of serving checked-in `docs/` files.

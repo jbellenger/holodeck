@@ -6,11 +6,9 @@ from holodeck.core.server import deploy_player
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
-def test_player_assets_match_packaged_resources():
+def test_packaged_player_assets_exist():
     for asset_name in ("index.html", "player.js", "styles.css"):
-        canonical_asset = (ROOT_DIR / "holodeck-player" / asset_name).read_text(encoding="utf-8")
-        resource_asset = (ROOT_DIR / "holodeck" / "resources" / asset_name).read_text(encoding="utf-8")
-        assert resource_asset == canonical_asset
+        assert (ROOT_DIR / "holodeck" / "resources" / asset_name).is_file()
 
 
 def test_deployed_player_assets_match_packaged_resources(tmp_path):
@@ -23,8 +21,8 @@ def test_deployed_player_assets_match_packaged_resources(tmp_path):
 
 
 def test_player_assets_use_relative_paths_for_static_hosts():
-    index_html = (ROOT_DIR / "holodeck-player" / "index.html").read_text(encoding="utf-8")
-    player_js = (ROOT_DIR / "holodeck-player" / "player.js").read_text(encoding="utf-8")
+    index_html = (ROOT_DIR / "holodeck" / "resources" / "index.html").read_text(encoding="utf-8")
+    player_js = (ROOT_DIR / "holodeck" / "resources" / "player.js").read_text(encoding="utf-8")
 
     assert 'href="styles.css"' in index_html
     assert 'src="player.js"' in index_html

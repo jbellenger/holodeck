@@ -4,10 +4,9 @@
 This repository has two main parts:
 
 - `holodeck/`: Blender add-on code. Keep pure, testable logic in `holodeck/core/` and Blender-specific adapters in `holodeck/handlers/`.
-- `holodeck-player/`: Browser player assets, including `index.html`, `styles.css`, and `server.py`.
+- `holodeck/resources/`: Browser player assets, including `index.html`, `styles.css`, and `player.js`.
 - `tests/`: Pytest coverage for the add-on and local server behavior.
-- `demo.blend`: Example Blender source file.
-- `holodeck/resources/`: Packaged add-on assets.
+- `demo/`: Canonical demo source files, including `demo.blend` and tracked rendered frames.
 
 Preserve the existing separation of concerns: logic belongs in `core/`, Blender hooks and UI belong in `handlers/`.
 

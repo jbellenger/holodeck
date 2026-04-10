@@ -12,6 +12,9 @@ class CancelledActionError extends Error {
   const frameMillis = 1000 / fps;
   const img = document.getElementById("image");
   const status = document.getElementById("status");
+  const message = document.getElementById("message");
+  const loadingBar = document.getElementById("loading-bar");
+  const loadingProgress = document.getElementById("loading-progress");
 
   let lastActionId = 0;
   let currentFrame = 0;
@@ -21,18 +24,54 @@ class CancelledActionError extends Error {
   const warmedFrames = new Array(frameUrls.length).fill(false);
   const frameWarmPromises = new Array(frameUrls.length).fill(null);
 
-  function showStatus(message) {
-    status.textContent = message;
-    status.style.display = "block";
+  function announceStatus(messageText) {
+    status.textContent = messageText;
   }
 
-  function hideStatus() {
-    status.style.display = "none";
+  function showMessage(messageText) {
+    announceStatus(messageText);
+    hideLoadingProgress();
+    message.textContent = messageText;
+    message.style.display = "block";
+  }
+
+  function hideMessage() {
+    message.style.display = "none";
+    message.textContent = "";
+  }
+
+  function showLoadingProgress(completed = null, total = null) {
+    announceStatus(
+      completed !== null && total !== null
+        ? `Loading frames ${completed}/${total}`
+        : "Loading frames…"
+    );
+    hideMessage();
+    loadingBar.style.display = "block";
+
+    if (completed !== null && total !== null && total > 0) {
+      loadingBar.classList.remove("is-indeterminate");
+      loadingProgress.style.width = `${(completed / total) * 100}%`;
+      loadingProgress.style.transform = "translateX(0)";
+      return;
+    }
+
+    loadingBar.classList.add("is-indeterminate");
+    loadingProgress.style.width = "15%";
+    loadingProgress.style.transform = "translateX(-100%)";
+  }
+
+  function hideLoadingProgress() {
+    loadingBar.style.display = "none";
+    loadingBar.classList.remove("is-indeterminate");
+    loadingProgress.style.width = "15%";
+    loadingProgress.style.transform = "translateX(-100%)";
   }
 
   function showPlayer() {
     img.style.display = "block";
-    hideStatus();
+    hideMessage();
+    hideLoadingProgress();
   }
 
   function startAction() {
@@ -128,7 +167,7 @@ class CancelledActionError extends Error {
     let nextPendingIndex = 0;
     let completed = 0;
     if (showProgress) {
-      showStatus(`Loading frames ${completed}/${pendingFrames.length}`);
+      showLoadingProgress(completed, pendingFrames.length);
     }
 
     async function worker() {
@@ -141,7 +180,7 @@ class CancelledActionError extends Error {
         assertActionIfProvided(actionId);
         completed += 1;
         if (showProgress) {
-          showStatus(`Loading frames ${completed}/${pendingFrames.length}`);
+          showLoadingProgress(completed, pendingFrames.length);
         }
       }
     }
@@ -162,7 +201,7 @@ class CancelledActionError extends Error {
     currentFrame = clampedFrame;
 
     if (ready) {
-      hideStatus();
+      hideLoadingProgress();
     }
 
     return clampedFrame;
@@ -221,7 +260,7 @@ class CancelledActionError extends Error {
       showProgress: true,
       excludeFrame: clampedFrame,
     });
-    hideStatus();
+    hideLoadingProgress();
 
     const segmentEnd = getSegmentEnd(currentFrame);
 
@@ -257,11 +296,13 @@ class CancelledActionError extends Error {
   function runAsync(action) {
     action().catch((error) => {
       if (error instanceof CancelledActionError) {
+        hideLoadingProgress();
         return;
       }
 
       playing = false;
-      showStatus("Failed to load frames");
+      hideLoadingProgress();
+      showMessage("Failed to load frames");
       console.error(error);
     });
   }
@@ -299,11 +340,12 @@ class CancelledActionError extends Error {
 
   try {
     if (frames.length === 0) {
-      showStatus("No frames found");
+      showMessage("No frames found");
       return;
     }
 
     const initialActionId = startAction();
+    showLoadingProgress();
     await warmFrame(0);
     assertActionActive(initialActionId);
     await waitForDisplayedFrame(0);
@@ -311,7 +353,8 @@ class CancelledActionError extends Error {
     showPlayer();
     runAsync(() => warmSegment(0, { excludeFrame: 0 }));
   } catch (error) {
-    showStatus("Failed to load frames");
+    hideLoadingProgress();
+    showMessage("Failed to load frames");
     throw error;
   }
 })();

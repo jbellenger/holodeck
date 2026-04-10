@@ -42,16 +42,7 @@ jobs:
 
       - name: Build Pages site
         run: |
-          set -euxo pipefail
-
-          site_dir="$RUNNER_TEMP/pages-site"
-          blender_bin="$RUNNER_TEMP/blender/blender"
-
-          rm -rf "$site_dir"
-          mkdir -p "$site_dir"
-          cp -R tests/fixtures/renders/demo "$site_dir/render"
-          ./holodeck-venv/bin/python -m holodeck refresh demo.blend "$site_dir" --blender "$blender_bin"
-          touch "$site_dir/.nojekyll"
+          make build-demo BLENDER="$RUNNER_TEMP/blender/blender" DEMO_OUTPUT="$RUNNER_TEMP/pages-site"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

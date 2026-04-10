@@ -21,6 +21,18 @@ body {
 
 #status {
   position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+#message {
+  position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
@@ -28,6 +40,39 @@ body {
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.65);
   letter-spacing: 0.02em;
+  display: none;
+}
+
+#loading-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  display: none;
+  overflow: hidden;
+}
+
+#loading-progress {
+  width: 15%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.55);
+  transform: translateX(-100%);
+}
+
+#loading-bar.is-indeterminate #loading-progress {
+  animation: loading-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes loading-slide {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(667%);
+  }
 }
 
 #image {
