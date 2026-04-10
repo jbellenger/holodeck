@@ -1,102 +1,105 @@
-[Live Demo](https://jbellenger.github.io/holodeck/)
-
 # Holodeck
 
-Holodeck is a small Blender presentation workflow made of two parts:
+Holodeck is a CLI tool and webapp that renders Blender animations as slide decks that can be viewed in a web-browser.
 
-- a Blender add-on in `holodeck/` that generates presentation data from an animation
-- a browser player in `holodeck/resources/` that plays rendered frames using `manifest.json`
+Because the Holodeck webapp displays pre-rendered frames, the resulting slide deck presentation allows slide decks that are higher fidelity than what can be achieved with a tool like google slides, in a way that appears to be realtime (but isn't).
 
-The repo also includes tests, a sample Blender file (`demo.blend`), and build helpers for packaging both parts.
+Live demo: [jbellenger.github.io/holodeck](https://jbellenger.github.io/holodeck/)
+
+Holodeck uses Blender frame markers (default blender key-binding: <kbd>M</kbd>) as pause points. Pressing space in the holodeck webapp will animate (using the frame rate configured in blender) until the next pause point.
+
+To turn a `.blend` file into something you can upload to a static host, run:
+
+```bash
+holodeck build demo.blend dist/demo
+```
+
+That creates `dist/demo`, which you can upload to GitHub Pages, S3, or any other static host. To preview the same directory locally, run:
+
+```bash
+holodeck serve dist/demo
+```
+
+## Configuring a Blend File
+
+Holodeck reads the active scene's frame range, fps, and timeline markers from Blender.
+
+- `frame_start` and `frame_end` define the rendered frame span.
+- Timeline markers define presentation boundaries. Put a marker on the frame where a section should begin.
+- In the browser player, left and right navigation jumps between marker frames, and playback stops when it reaches the next marker or the end of the animation.
+- Marker names are ignored. Only their frame numbers matter.
+- Marker frame numbers are interpreted relative to the scene's start frame, so a marker on the first rendered frame becomes marker `0` in the exported manifest.
+- Markers outside the rendered frame range are ignored.
 
 ## Project Layout
 
-- `holodeck/`: Blender add-on source
-- `holodeck/core/`: pure logic such as manifest and server helpers
-- `holodeck/handlers/`: Blender-specific handlers and UI
-- `holodeck/resources/`: canonical packaged player assets used by the add-on and headless export
-- `holodeck-player/`: local dev server and standalone player copy
-- `tests/`: pytest coverage for core logic and server behavior
-- `demo.blend`: example source file for local development
+- `holodeck/`: Python package and CLI entrypoint
+- `holodeck/core/`: testable logic for Blender invocation, manifest generation, and serving
+- `holodeck/resources/`: browser player assets copied into output bundles
+- `tests/`: pytest coverage for core logic and CLI behavior
+- `tests/fixtures/blends/`: Blender fixtures for render override integration tests
+- `demo.blend`: sample Blender source file
 
 ## Quick Start
 
-1. Create the virtual environment and install test dependencies:
+1. Create the virtual environment and install dependencies:
 
 ```bash
 make setup
 ```
 
-2. Run the test suite:
+2. Build the standalone `holodeck` executable:
 
 ```bash
-make test
+make build
 ```
 
-3. Start the local player server:
+3. Build an export from a `.blend` file:
 
 ```bash
-make serve
+./dist/holodeck build demo.blend dist/demo
 ```
 
-4. Open `http://localhost:8000` in your browser.
+4. Serve it locally:
+
+```bash
+./dist/holodeck serve dist/demo
+```
+
+5. Open `http://localhost:8000`.
+
+## CLI Commands
+
+```bash
+holodeck build demo.blend dist/demo
+holodeck serve dist/demo --port 8000
+```
+
+- `build`: render a `.blend` file into a static directory you can upload to a site
+- `serve`: preview an existing Holodeck directory locally
+
+## Standalone Executable
+
+You can build a single-file executable named `holodeck`:
+
+```bash
+make build
+```
+
+That produces `dist/holodeck`.
+
+- The file is movable on the same machine.
+- The executable bundles Python, the player assets, and the Blender helper scripts.
+- It is distributable to other machines of the same OS and CPU architecture with Blender available on `PATH`.
+- It is not a cross-platform binary. Build it separately on macOS, Linux, and Windows if you need all three.
 
 ## Common Commands
 
-- `make setup`: create `holodeck-venv/` and install pytest
+- `make setup`: create `holodeck-venv/` and install the package plus pytest
 - `make test`: run the full test suite
 - `make test-one TEST=test_add_frame`: run a focused test
-- `make serve`: start the local server on port `8000`
-- `make build`: create addon and player zip files in `dist/`
-- `make export-headless BLEND_FILE=demo.blend HOLODECK_OUTPUT=dist/demo-holodeck`: render a static export bundle with Blender in background mode
-- `make build-demo`: refresh the tracked `docs/` bundle used by GitHub Pages
+- `make build`: produce the standalone `dist/holodeck` binary with PyInstaller
+- `make build-demo`: refresh the tracked `docs/` bundle from `demo.blend`
+- `make regen-blend-fixtures`: rebuild the tracked Blender test fixtures
+- `make serve-demo`: serve `docs/` on port `8000` using `dist/holodeck`
 - `make clean`: remove the virtualenv and Python cache files
-
-## Typical Workflow
-
-1. Open `demo.blend` or your own Blender file.
-2. Set the render output to a `render/` directory relative to the blend file.
-3. Use the Holodeck add-on to render frames and generate `manifest.json` plus root-level player assets.
-4. Start the built-in server from the Holodeck panel and open the reported URL.
-
-## Headless Export
-
-The background export workflow renders a self-contained static bundle with this layout:
-
-```text
-build/holodeck/
-  index.html
-  manifest.json
-  player.js
-  styles.css
-  render/
-```
-
-You can produce that bundle directly with Blender:
-
-```bash
-make export-headless BLEND_FILE=demo.blend HOLODECK_OUTPUT=dist/demo-holodeck
-```
-
-For another project, invoke the same script from its `Makefile`:
-
-```make
-BLENDER ?= blender
-HOLODECK_REPO ?= /path/to/holodeck
-BLEND_FILE := blend/presentation.blend
-HOLODECK_OUTPUT := build/holodeck
-
-build-holodeck:
-	rm -rf $(HOLODECK_OUTPUT)
-	$(BLENDER) -b $(BLEND_FILE) \
-	  --python $(HOLODECK_REPO)/scripts/export_holodeck.py \
-	  -- --output $(HOLODECK_OUTPUT)
-```
-
-The repo’s own public demo is the committed `docs/` bundle. Refresh it with:
-
-```bash
-make build-demo
-```
-
-For player-specific details, see `holodeck-player/README.md`.
