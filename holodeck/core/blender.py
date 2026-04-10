@@ -93,9 +93,10 @@ def render_blend(
     output_dir: Path,
     blender_executable: str = "blender",
     scene: str | None = None,
+    res_pct: int = 100,
 ) -> None:
     """Render frames for a blend file into the output directory."""
-    script_args = ["--output", str(output_dir)]
+    script_args = ["--output", str(output_dir), "--res-pct", str(res_pct)]
     if scene:
         script_args.extend(["--scene", scene])
 

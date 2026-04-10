@@ -20,6 +20,12 @@ def parse_args(argv):
         "--scene",
         help="Optional Blender scene name to render instead of the active scene.",
     )
+    parser.add_argument(
+        "--res-pct",
+        type=int,
+        default=100,
+        help="Resolution percentage override for rendering.",
+    )
     return parser.parse_args(argv)
 
 
@@ -29,8 +35,15 @@ def main(argv):
     render_dir = output_dir / "render"
     render_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.res_pct <= 0:
+        raise ValueError("Resolution percentage must be a positive integer.")
+
     scene = bpy.data.scenes[args.scene] if args.scene else bpy.context.scene
-    configure_scene_for_holodeck_render(scene, render_dir)
+    configure_scene_for_holodeck_render(
+        scene,
+        render_dir,
+        resolution_percentage=args.res_pct,
+    )
     bpy.ops.render.render(animation=True, scene=scene.name)
 
 

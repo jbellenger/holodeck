@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Render frames from a .blend file into an output directory.",
     )
     _add_blend_arguments(render_parser)
+    _add_render_arguments(render_parser)
     render_parser.set_defaults(func=render_frames_command)
     command_parsers.append(render_parser)
 
@@ -53,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Render frames and refresh the output bundle in a single step.",
     )
     _add_blend_arguments(build_parser)
+    _add_render_arguments(build_parser)
     build_parser.set_defaults(func=build_command)
     command_parsers.append(build_parser)
 
@@ -168,6 +170,22 @@ def _add_blend_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _add_render_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--res-pct",
+        type=_positive_int,
+        default=100,
+        help="Resolution percentage override for rendering. 100 keeps the blend resolution, 50 halves it, 200 doubles it.",
+    )
+
+
 def _resolve_blend_file(blend_file: str) -> Path:
     blend_path = Path(blend_file).expanduser().resolve()
     if not blend_path.is_file():
@@ -198,6 +216,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         blender_executable=args.blender,
         scene=args.scene,
+        res_pct=args.res_pct,
     )
 
     print(f"Rendered frames into {output_dir / 'render'}")

@@ -81,11 +81,18 @@ class TestRenderBlend:
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
-        render_blend(blend_file=blend_file, output_dir=output_dir, scene="Deck")
+        render_blend(blend_file=blend_file, output_dir=output_dir, scene="Deck", res_pct=50)
 
         assert captured["blend_file"] == blend_file
         assert captured["script_name"] == "render_frames.py"
-        assert captured["script_args"] == ["--output", str(output_dir), "--scene", "Deck"]
+        assert captured["script_args"] == [
+            "--output",
+            str(output_dir),
+            "--res-pct",
+            "50",
+            "--scene",
+            "Deck",
+        ]
 
 
 class TestExtractBlendMetadata:

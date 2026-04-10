@@ -8,14 +8,24 @@ from typing import Any
 
 HOLODECK_RENDER_FILE_FORMAT = "AVIF"
 HOLODECK_RENDER_MEDIA_TYPE = "IMAGE"
+DEFAULT_RESOLUTION_PERCENTAGE = 100
 
 
-def configure_scene_for_holodeck_render(scene: Any, render_dir: Path) -> None:
+def configure_scene_for_holodeck_render(
+    scene: Any,
+    render_dir: Path,
+    *,
+    resolution_percentage: int = DEFAULT_RESOLUTION_PERCENTAGE,
+) -> None:
     """Force Blender scene output into a Holodeck-compatible image sequence."""
+    if resolution_percentage <= 0:
+        raise ValueError("Resolution percentage must be a positive integer.")
+
     render = scene.render
     image_settings = render.image_settings
     render.filepath = str(render_dir) + "/"
     render.use_file_extension = True
+    render.resolution_percentage = resolution_percentage
 
     try:
         if hasattr(image_settings, "media_type"):

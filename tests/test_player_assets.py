@@ -34,11 +34,20 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     styles_css = (ROOT_DIR / "holodeck" / "resources" / "styles.css").read_text(encoding="utf-8")
 
     assert 'const loadingIndicatorDelayMillis = 32;' in player_js
+    assert 'const optimisticPreloadSegmentCount = 2;' in player_js
+    assert 'const swipeThresholdPixels = 48;' in player_js
     assert 'case "ArrowDown":' in player_js
     assert 'case "Enter":' in player_js
     assert 'case "KeyF":' in player_js
     assert "requestFullscreen" in player_js
+    assert 'screen.orientation.lock("landscape")' in player_js
+    assert "screen.orientation.unlock();" in player_js
+    assert 'container.addEventListener("touchstart"' in player_js
+    assert 'container.addEventListener("touchcancel"' in player_js
     assert 'container.addEventListener("touchend"' in player_js
-    assert "changedTouches[0].clientX" in player_js
+    assert "event.touches[0].clientX" in player_js
+    assert "event.touches[0].clientY" in player_js
+    assert "handleTouchGesture(event.changedTouches[0])" in player_js
     assert "jump(-1);" in player_js
+    assert "scheduleOptimisticPreload" in player_js
     assert "touch-action: manipulation;" in styles_css

@@ -1,4 +1,7 @@
+import pytest
+
 from holodeck.core.render_settings import (
+    DEFAULT_RESOLUTION_PERCENTAGE,
     HOLODECK_RENDER_FILE_FORMAT,
     HOLODECK_RENDER_MEDIA_TYPE,
     configure_scene_for_holodeck_render,
@@ -14,6 +17,7 @@ class _FakeRender:
     def __init__(self):
         self.filepath = ""
         self.use_file_extension = False
+        self.resolution_percentage = 42
         self.image_settings = _FakeImageSettings()
 
 
@@ -79,7 +83,19 @@ class TestConfigureSceneForHolodeckRender:
 
         assert scene.render.filepath == str(render_dir) + "/"
         assert scene.render.use_file_extension is True
+        assert scene.render.resolution_percentage == DEFAULT_RESOLUTION_PERCENTAGE
         assert scene.render.image_settings.file_format == HOLODECK_RENDER_FILE_FORMAT
+
+    def test_overrides_resolution_percentage(self, tmp_path):
+        scene = _FakeScene()
+
+        configure_scene_for_holodeck_render(
+            scene,
+            tmp_path / "render",
+            resolution_percentage=50,
+        )
+
+        assert scene.render.resolution_percentage == 50
 
     def test_converts_video_output_to_image_sequence_before_setting_avif(self, tmp_path):
         scene = _VideoScene()
@@ -98,3 +114,13 @@ class TestConfigureSceneForHolodeckRender:
             assert HOLODECK_RENDER_FILE_FORMAT in str(exc)
         else:
             raise AssertionError("Expected RuntimeError when AVIF is unsupported")
+
+    def test_raises_when_resolution_percentage_is_not_positive(self, tmp_path):
+        scene = _FakeScene()
+
+        with pytest.raises(ValueError, match="Resolution percentage"):
+            configure_scene_for_holodeck_render(
+                scene,
+                tmp_path / "render",
+                resolution_percentage=0,
+            )

@@ -1,5 +1,7 @@
 const preloadConcurrency = 6;
 const loadingIndicatorDelayMillis = 32;
+const optimisticPreloadSegmentCount = 2;
+const swipeThresholdPixels = 48;
 
 class CancelledActionError extends Error {
   constructor() {
@@ -24,6 +26,7 @@ class CancelledActionError extends Error {
   let ready = false;
   let loadingIndicatorTimeout = null;
   let pendingLoadingState = null;
+  let touchStartPoint = null;
   const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
   const warmedFrames = new Array(frameUrls.length).fill(false);
   const frameWarmPromises = new Array(frameUrls.length).fill(null);
@@ -151,6 +154,28 @@ class CancelledActionError extends Error {
     };
   }
 
+  function getPreloadSegmentStarts(frame, segmentCountAhead = optimisticPreloadSegmentCount) {
+    if (frameUrls.length === 0) {
+      return [];
+    }
+
+    const starts = [Math.max(0, Math.min(frame, frameUrls.length - 1))];
+
+    while (starts.length <= segmentCountAhead) {
+      const nextStart = getSegmentEnd(starts[starts.length - 1]);
+      if (nextStart <= starts[starts.length - 1]) {
+        break;
+      }
+
+      starts.push(nextStart);
+      if (nextStart === frameUrls.length - 1) {
+        break;
+      }
+    }
+
+    return starts;
+  }
+
   async function warmFrame(frameIndex) {
     if (warmedFrames[frameIndex]) {
       return;
@@ -224,6 +249,20 @@ class CancelledActionError extends Error {
     return { start, end };
   }
 
+  async function warmOptimisticSegments(frame, { excludeFrame = null } = {}) {
+    const segmentStarts = getPreloadSegmentStarts(frame);
+
+    for (let index = 0; index < segmentStarts.length; index += 1) {
+      await warmSegment(segmentStarts[index], {
+        excludeFrame: index === 0 ? excludeFrame : null,
+      });
+    }
+  }
+
+  function scheduleOptimisticPreload(frame, { excludeFrame = null } = {}) {
+    runAsync(() => warmOptimisticSegments(frame, { excludeFrame }));
+  }
+
   function displayFrame(frame) {
     if (frameUrls.length === 0) {
       return null;
@@ -255,7 +294,7 @@ class CancelledActionError extends Error {
       return;
     }
 
-    runAsync(() => warmSegment(clampedFrame, { excludeFrame: clampedFrame }));
+    scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
   }
 
   function jump(direction) {
@@ -291,21 +330,65 @@ class CancelledActionError extends Error {
     runAsync(() => play(currentFrame, startAction()));
   }
 
-  function toggleFullscreen() {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch((error) => {
-        console.error(error);
-      });
+  async function tryLockLandscapeOrientation() {
+    if (!screen.orientation || !screen.orientation.lock) {
       return;
     }
 
-    if (!container.requestFullscreen) {
-      return;
-    }
-
-    container.requestFullscreen().catch((error) => {
+    try {
+      await screen.orientation.lock("landscape");
+    } catch (error) {
       console.error(error);
-    });
+    }
+  }
+
+  function unlockOrientationIfSupported() {
+    if (!screen.orientation || !screen.orientation.unlock) {
+      return;
+    }
+
+    screen.orientation.unlock();
+  }
+
+  function isWideImage() {
+    return img.naturalWidth > img.naturalHeight;
+  }
+
+  async function enableFullscreen({ preferLandscape = false } = {}) {
+    if (!container.requestFullscreen || document.fullscreenElement) {
+      return;
+    }
+
+    try {
+      await container.requestFullscreen();
+      if (preferLandscape && isWideImage()) {
+        await tryLockLandscapeOrientation();
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function disableFullscreen() {
+    if (!document.fullscreenElement || !document.exitFullscreen) {
+      return;
+    }
+
+    unlockOrientationIfSupported();
+    try {
+      await document.exitFullscreen();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      void disableFullscreen();
+      return;
+    }
+
+    void enableFullscreen();
   }
 
   function handleTouchAction(clientX) {
@@ -326,6 +409,27 @@ class CancelledActionError extends Error {
     togglePlayback();
   }
 
+  function handleTouchGesture(endPoint) {
+    if (!touchStartPoint || !ready) {
+      return;
+    }
+
+    const deltaX = endPoint.clientX - touchStartPoint.clientX;
+    const deltaY = endPoint.clientY - touchStartPoint.clientY;
+    const isVerticalSwipe = Math.abs(deltaY) >= swipeThresholdPixels && Math.abs(deltaY) > Math.abs(deltaX);
+
+    if (isVerticalSwipe) {
+      if (deltaY < 0) {
+        void enableFullscreen({ preferLandscape: true });
+      } else {
+        void disableFullscreen();
+      }
+      return;
+    }
+
+    handleTouchAction(endPoint.clientX);
+  }
+
   async function play(startFrame, actionId) {
     const clampedFrame = displayFrame(startFrame);
     if (clampedFrame === null) {
@@ -340,6 +444,7 @@ class CancelledActionError extends Error {
       excludeFrame: clampedFrame,
     });
     hideLoadingProgress();
+    scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
 
     const segmentEnd = getSegmentEnd(currentFrame);
 
@@ -362,6 +467,7 @@ class CancelledActionError extends Error {
         const isMarker = markers.includes(nextFrame);
         if (isLast || isMarker) {
           playing = false;
+          scheduleOptimisticPreload(nextFrame, { excludeFrame: nextFrame });
           return;
         }
 
@@ -421,13 +527,31 @@ class CancelledActionError extends Error {
     }
   });
 
+  container.addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 1) {
+      touchStartPoint = null;
+      return;
+    }
+
+    touchStartPoint = {
+      clientX: event.touches[0].clientX,
+      clientY: event.touches[0].clientY,
+    };
+  }, { passive: true });
+
+  container.addEventListener("touchcancel", () => {
+    touchStartPoint = null;
+  });
+
   container.addEventListener("touchend", (event) => {
     if (event.changedTouches.length !== 1) {
+      touchStartPoint = null;
       return;
     }
 
     event.preventDefault();
-    handleTouchAction(event.changedTouches[0].clientX);
+    handleTouchGesture(event.changedTouches[0]);
+    touchStartPoint = null;
   }, { passive: false });
 
   try {
@@ -443,7 +567,7 @@ class CancelledActionError extends Error {
     await waitForDisplayedFrame(0);
     ready = true;
     showPlayer();
-    runAsync(() => warmSegment(0, { excludeFrame: 0 }));
+    scheduleOptimisticPreload(0, { excludeFrame: 0 });
   } catch (error) {
     hideLoadingProgress();
     showMessage("Failed to load frames");

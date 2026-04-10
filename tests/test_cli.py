@@ -21,6 +21,7 @@ class TestCliHelp:
         assert "usage: holodeck build" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
+        assert "--res-pct RES_PCT" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--port PORT" in captured.out
         assert "--no-open" in captured.out
@@ -40,6 +41,7 @@ class TestCliHelp:
         assert "usage: holodeck build" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
+        assert "--res-pct RES_PCT" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--port PORT" in captured.out
         assert "--no-open" in captured.out
@@ -61,12 +63,25 @@ class TestRenderFramesCommand:
             lambda **kwargs: calls.append(("render", kwargs)),
         )
 
-        exit_code = main(["render-frames", str(blend_file), str(output_dir)])
+        exit_code = main(["render-frames", str(blend_file), str(output_dir), "--res-pct", "50"])
 
         assert exit_code == 0
         assert calls[0] == ("deploy", output_dir.resolve())
         assert calls[1][0] == "render"
         assert calls[1][1]["blend_file"] == blend_file.resolve()
+        assert calls[1][1]["res_pct"] == 50
+
+    def test_rejects_non_positive_resolution_percentage(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["render-frames", str(blend_file), str(output_dir), "--res-pct", "0"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "must be a positive integer" in captured.err
 
 
 class TestRefreshCommand:
@@ -137,19 +152,19 @@ class TestBuildCommand:
 
         monkeypatch.setattr(
             "holodeck.cli.render_frames_command",
-            lambda args: calls.append(("render", args.blend_file, args.output_dir)) or 0,
+            lambda args: calls.append(("render", args.blend_file, args.output_dir, args.res_pct)) or 0,
         )
         monkeypatch.setattr(
             "holodeck.cli.refresh_command",
-            lambda args: calls.append(("manifest", args.blend_file, args.output_dir)) or 0,
+            lambda args: calls.append(("manifest", args.blend_file, args.output_dir, args.res_pct)) or 0,
         )
 
-        exit_code = main(["build", str(blend_file), str(output_dir)])
+        exit_code = main(["build", str(blend_file), str(output_dir), "--res-pct", "200"])
 
         assert exit_code == 0
         assert calls == [
-            ("render", str(blend_file), str(output_dir)),
-            ("manifest", str(blend_file), str(output_dir)),
+            ("render", str(blend_file), str(output_dir), 200),
+            ("manifest", str(blend_file), str(output_dir), 200),
         ]
 
 
