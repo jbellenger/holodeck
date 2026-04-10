@@ -4,9 +4,10 @@ This module uses bpy but delegates business logic to ManifestGenerator.
 """
 import bpy
 from pathlib import Path
-from ..core import ManifestGenerator
+from ..core import ManifestGenerator, finalize_render_export
 
 _generator = ManifestGenerator()
+_OUTPUT_ROOT_KEY = "holodeck_output_root"
 
 
 def on_render_init(scene: bpy.types.Scene) -> None:
@@ -26,19 +27,16 @@ def on_render_complete(scene: bpy.types.Scene) -> None:
     """Called when render completes."""
     fps = scene.render.fps
     marker_frames = [marker.frame for marker in scene.timeline_markers]
-    markers = _generator.normalize_markers(marker_frames, scene.frame_start)
-
-    manifest = _generator.generate_manifest(fps, markers)
-
-    # Write manifest next to the rendered frames
-    if _generator.frames:
-        first_frame = Path(_generator.frames[0])
-        manifest_path = first_frame.parent / "manifest.json"
-    else:
-        # Fallback: write next to blend file
-        manifest_path = Path(bpy.data.filepath).parent / "manifest.json"
-
-    _generator.write_manifest(manifest, str(manifest_path))
+    export_root_value = scene.get(_OUTPUT_ROOT_KEY)
+    export_root = Path(export_root_value) if export_root_value else None
+    manifest_path, manifest = finalize_render_export(
+        _generator,
+        fps=fps,
+        marker_frames=marker_frames,
+        frame_start=scene.frame_start,
+        blend_filepath=bpy.data.filepath,
+        export_root=export_root,
+    )
     print(f"[holodeck] Manifest written to {manifest_path} with {len(manifest['frames'])} frames")
 
 

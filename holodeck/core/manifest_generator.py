@@ -48,6 +48,7 @@ class ManifestGenerator:
         self,
         fps: int,
         markers: List[int],
+        root_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
         """
         Generate manifest data.
@@ -62,19 +63,27 @@ class ManifestGenerator:
         return {
             "fps": fps,
             "markers": markers,
-            "frames": self._relativize_paths(self.frames),
+            "frames": self._relativize_paths(self.frames, root_dir=root_dir),
         }
 
-    def _relativize_paths(self, frame_paths: List[str]) -> List[str]:
-        """Convert absolute paths to relative paths starting from 'render/'."""
+    def _relativize_paths(
+        self,
+        frame_paths: List[str],
+        root_dir: Optional[Path] = None,
+    ) -> List[str]:
+        """Convert frame paths to browser-safe relative paths when possible."""
         rel_frames = []
+        resolved_root = root_dir.resolve() if root_dir else None
         for fpath in frame_paths:
-            try:
-                idx = fpath.index("render")
-                rel_frames.append(fpath[idx:])
-            except ValueError:
-                # Path doesn't contain 'render', preserve as-is
-                rel_frames.append(fpath)
+            frame_path = Path(fpath)
+            if resolved_root and frame_path.is_absolute():
+                try:
+                    rel_frames.append(frame_path.resolve().relative_to(resolved_root).as_posix())
+                    continue
+                except ValueError:
+                    pass
+
+            rel_frames.append(frame_path.as_posix())
         return rel_frames
 
     def write_manifest(
@@ -84,4 +93,5 @@ class ManifestGenerator:
     ) -> None:
         """Write manifest to JSON file."""
         output_file = Path(output_path)
-        output_file.write_text(json.dumps(manifest, indent=4))
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(json.dumps(manifest, indent=4), encoding="utf-8")

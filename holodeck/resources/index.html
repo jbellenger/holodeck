@@ -1,98 +1,14 @@
 <html>
   <head>
-    <style>
-      body { margin: 0; background: #000; }
-      #container { height: 100vh; display: flex; align-items: center; justify-content: center; }
-      img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Holodeck</title>
+    <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <div id="container">
       <img id="image" />
     </div>
-    <script>
-      const cacheBust = performance.now();
-
-      (async function() {
-        const {markers, frames, fps} = await fetch("../render/manifest.json")
-          .then((resp) => { return resp.json() })
-
-        const frameMillis = 1000/fps;
-        const img = document.getElementById("image");
-
-        let lastActionId = 0;
-        let currentFrame = 0;
-        let playing = false;
-
-        function jump(direction) {
-          if (direction == 1) {
-            const idx = markers.find((element) => element > currentFrame);
-            if (idx === undefined) {
-              seek(frames.length - 1);
-            } else {
-              seek(idx);
-            }
-          } else if (direction == -1) {
-            const idx = markers.findLast(element => element < currentFrame);
-            if (idx == undefined) {
-              seek(0);
-            } else {
-              seek(idx);
-            }
-          } else {
-            throw new Error(`invalid jump direction: ${direction}`);
-          }
-        }
-
-        function seek(frame) {
-          frame = Math.max(0, frame);
-          frame = Math.min(frame, frames.length - 1);
-          img.src = `../${frames[frame]}?cacheBust=${cacheBust}`;
-          currentFrame = frame;
-        }
-
-        function play(startFrame) {
-          seek(startFrame);
-
-          if (!playing) return;
-          let actionId = ++lastActionId;
-          function loop(frame) {
-            actionId = ++lastActionId;
-            setTimeout(() => {
-              if (actionId != lastActionId) return;
-              nextFrame = frame + 1;
-              seek(nextFrame);
-
-              let isLast = nextFrame == frames.length;
-              let isMarker = markers.indexOf(nextFrame) != -1;
-              if (isLast || isMarker) {
-                playing = false;
-                return;
-              }
-              loop(nextFrame);
-            }, frameMillis);
-          }
-          loop(startFrame);
-        }
-
-        addEventListener('keydown', (event) => {
-          switch (event.code) {
-            case "ArrowLeft":
-              jump(-1);
-              break;
-            case "ArrowRight":
-              jump(1)
-              break;
-            case "Space":
-              playing = !playing;
-              ++lastActionId;
-              play(currentFrame);
-              break;
-          }
-        });
-
-        seek(0);
-      })();
-    </script>
+    <script src="player.js"></script>
   </body>
 </html>

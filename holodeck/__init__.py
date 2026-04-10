@@ -24,6 +24,7 @@ import sys
 
 _modules = [
     "core",
+    "core.exporter",
     "core.manifest_generator",
     "core.server",
     "handlers",

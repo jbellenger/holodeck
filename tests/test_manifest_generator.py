@@ -79,11 +79,15 @@ class TestManifestGenerator:
         assert manifest["markers"] == [30, 60, 90]
 
     def test_relativize_paths_strips_prefix(self):
-        """Test that absolute paths are relativized to render/."""
+        """Test that absolute paths are relativized to the export root."""
         self.generator.add_frame("/Users/james/project/render/0001.png")
         self.generator.add_frame("/Users/james/project/render/0002.png")
 
-        manifest = self.generator.generate_manifest(fps=60, markers=[])
+        manifest = self.generator.generate_manifest(
+            fps=60,
+            markers=[],
+            root_dir=Path("/Users/james/project"),
+        )
 
         assert manifest["frames"][0] == "render/0001.png"
         assert manifest["frames"][1] == "render/0002.png"
@@ -92,7 +96,11 @@ class TestManifestGenerator:
         """Paths without 'render' should be preserved as-is."""
         self.generator.add_frame("/some/other/path/frame.png")
 
-        manifest = self.generator.generate_manifest(fps=60, markers=[])
+        manifest = self.generator.generate_manifest(
+            fps=60,
+            markers=[],
+            root_dir=Path("/Users/james/project"),
+        )
 
         assert manifest["frames"][0] == "/some/other/path/frame.png"
 
@@ -185,10 +193,13 @@ class TestManifestGeneratorEdgeCases:
         assert markers == [0, 1]
 
     def test_multiple_render_in_path(self):
-        """Test path with multiple 'render' occurrences."""
+        """Paths should be made relative from the explicit export root."""
         generator = ManifestGenerator()
         generator.add_frame("/render/project/render/0001.png")
-        manifest = generator.generate_manifest(fps=60, markers=[])
+        manifest = generator.generate_manifest(
+            fps=60,
+            markers=[],
+            root_dir=Path("/render/project"),
+        )
 
-        # Should use first occurrence
-        assert manifest["frames"][0] == "render/project/render/0001.png"
+        assert manifest["frames"][0] == "render/0001.png"

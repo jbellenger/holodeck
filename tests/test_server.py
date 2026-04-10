@@ -27,11 +27,11 @@ class TestGetPlayerUrl:
 
     def test_default_player_path(self):
         url = get_player_url(8000)
-        assert url == f"http://localhost:8000/{DEFAULT_PLAYER_DIR}/"
+        assert url == "http://localhost:8000/"
 
     def test_custom_port(self):
         url = get_player_url(3000)
-        assert url == f"http://localhost:3000/{DEFAULT_PLAYER_DIR}/"
+        assert url == "http://localhost:3000/"
 
     def test_custom_player_path(self):
         url = get_player_url(8000, "my-player")
@@ -64,20 +64,15 @@ class TestCheckPlayerExists:
         assert check_player_exists(tmp_path) is False
 
     def test_empty_player_dir(self, tmp_path):
-        player_dir = tmp_path / DEFAULT_PLAYER_DIR
-        player_dir.mkdir()
+        (tmp_path / "styles.css").touch()
         assert check_player_exists(tmp_path) is False
 
     def test_player_dir_without_index(self, tmp_path):
-        player_dir = tmp_path / DEFAULT_PLAYER_DIR
-        player_dir.mkdir()
-        (player_dir / "styles.css").touch()
+        (tmp_path / "styles.css").touch()
         assert check_player_exists(tmp_path) is False
 
     def test_valid_player_dir(self, tmp_path):
-        player_dir = tmp_path / DEFAULT_PLAYER_DIR
-        player_dir.mkdir()
-        (player_dir / "index.html").write_text("<html></html>")
+        (tmp_path / "index.html").write_text("<html></html>")
         assert check_player_exists(tmp_path) is True
 
     def test_custom_player_path(self, tmp_path):
@@ -114,10 +109,7 @@ class TestCreateServer:
             server.shutdown()
 
     def test_server_serves_index_html(self, tmp_path):
-        # Create player directory structure
-        player_dir = tmp_path / DEFAULT_PLAYER_DIR
-        player_dir.mkdir()
-        (player_dir / "index.html").write_text("<html><body>Player</body></html>")
+        (tmp_path / "index.html").write_text("<html><body>Player</body></html>")
 
         # Create and start server
         server = create_server(0, tmp_path)
@@ -129,8 +121,7 @@ class TestCreateServer:
         try:
             time.sleep(0.1)
 
-            # Fetch the player index
-            url = f"http://localhost:{port}/{DEFAULT_PLAYER_DIR}/index.html"
+            url = f"http://localhost:{port}/"
             with urllib.request.urlopen(url, timeout=5) as response:
                 content = response.read().decode()
                 assert "Player" in content
@@ -191,25 +182,27 @@ class TestDeployPlayer:
         player_dir = deploy_player(tmp_path)
         assert player_dir.exists()
         assert player_dir.is_dir()
-        assert player_dir.name == DEFAULT_PLAYER_DIR
+        assert player_dir == tmp_path
 
     def test_deploy_copies_index_html(self, tmp_path):
         player_dir = deploy_player(tmp_path)
         index_file = player_dir / "index.html"
         assert index_file.exists()
+        assert (player_dir / "player.js").exists()
+        assert (player_dir / "styles.css").exists()
         content = index_file.read_text()
         assert "<html>" in content
-        assert "manifest.json" in content
+        assert "player.js" in content
 
     def test_deploy_custom_dirname(self, tmp_path):
         player_dir = deploy_player(tmp_path, "my-player")
         assert player_dir.name == "my-player"
         assert (player_dir / "index.html").exists()
+        assert (player_dir / "player.js").exists()
 
     def test_deploy_overwrites_existing(self, tmp_path):
         # Create existing player with old content
-        player_dir = tmp_path / DEFAULT_PLAYER_DIR
-        player_dir.mkdir()
+        player_dir = tmp_path
         (player_dir / "index.html").write_text("old content")
 
         # Deploy should overwrite
@@ -254,14 +247,13 @@ class TestEndToEnd:
         try:
             time.sleep(0.1)
 
-            # Request the player URL (directory with trailing slash)
             url = get_player_url(port)
             with urllib.request.urlopen(url, timeout=5) as response:
                 assert response.status == 200
                 content = response.read().decode()
                 # Verify it's the player HTML
                 assert "<html>" in content
-                assert "manifest.json" in content
+                assert "player.js" in content
         finally:
             server.shutdown()
 
@@ -279,7 +271,7 @@ class TestEndToEnd:
             "frames": ["render/0001.png", "render/0002.png"]
         }
         import json
-        (render_dir / "manifest.json").write_text(json.dumps(manifest))
+        (tmp_path / "manifest.json").write_text(json.dumps(manifest))
 
         # Create dummy frame files
         (render_dir / "0001.png").write_bytes(b"fake png 1")
@@ -300,14 +292,12 @@ class TestEndToEnd:
             with urllib.request.urlopen(player_url, timeout=5) as response:
                 assert response.status == 200
 
-            # Access manifest (the path the player uses)
-            manifest_url = f"http://localhost:{port}/render/manifest.json"
+            manifest_url = f"http://localhost:{port}/manifest.json"
             with urllib.request.urlopen(manifest_url, timeout=5) as response:
                 assert response.status == 200
                 data = json.loads(response.read().decode())
                 assert data["fps"] == 24
 
-            # Access frame (the path the player uses after prepending ../)
             frame_url = f"http://localhost:{port}/render/0001.png"
             with urllib.request.urlopen(frame_url, timeout=5) as response:
                 assert response.status == 200
