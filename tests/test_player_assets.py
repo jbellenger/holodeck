@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from holodeck.core.server import deploy_player
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -11,11 +13,13 @@ def test_player_assets_match_packaged_resources():
         assert resource_asset == canonical_asset
 
 
-def test_demo_player_assets_match_packaged_resources():
+def test_deployed_player_assets_match_packaged_resources(tmp_path):
+    deployed_player_dir = deploy_player(tmp_path)
+
     for asset_name in ("index.html", "player.js", "styles.css"):
-        demo_asset = (ROOT_DIR / "docs" / asset_name).read_text(encoding="utf-8")
+        deployed_asset = (deployed_player_dir / asset_name).read_text(encoding="utf-8")
         resource_asset = (ROOT_DIR / "holodeck" / "resources" / asset_name).read_text(encoding="utf-8")
-        assert demo_asset == resource_asset
+        assert deployed_asset == resource_asset
 
 
 def test_player_assets_use_relative_paths_for_static_hosts():
