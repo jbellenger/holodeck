@@ -1,8 +1,8 @@
-.PHONY: test test-one setup clean build build-demo serve-demo regen-blend-fixtures
+.PHONY: test test-one setup clean build build-pyinstaller build-pex build-demo serve-demo regen-blend-fixtures
 
 VENV := holodeck-venv
 PYTHON := $(VENV)/bin/python
-PYTEST := $(VENV)/bin/pytest
+PYTEST := $(PYTHON) -m pytest
 BLENDER ?= blender
 DEMO_OUTPUT ?= docs
 PORT ?= 8000
@@ -18,24 +18,37 @@ test-one:
 # Set up the virtual environment
 setup:
 	python3 -m venv $(VENV)
-	$(VENV)/bin/pip install -q -e . pytest
+	$(PYTHON) -m pip install -q -e . pytest
 
 # Remove generated files and caches
 clean:
 	rm -rf $(VENV)
+	rm -rf build
 	rm -rf dist
 	rm -rf __pycache__ .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
-# Build a standalone single-file executable at dist/holodeck
+# Build standalone executables at dist/holodeck and dist/holodeck.pex
 build:
-	rm -f dist/holodeck
+	$(MAKE) build-pyinstaller
+	$(MAKE) build-pex
+
+build-pyinstaller:
+	rm -f dist/holodeck dist/holodeck.exe
 	$(MAKE) dist/holodeck
 
+build-pex:
+	rm -f dist/holodeck.pex
+	$(MAKE) dist/holodeck.pex
+
 dist/holodeck:
-	$(VENV)/bin/pip install -q -e .[build]
+	$(PYTHON) -m pip install -q -e .[build]
 	$(PYTHON) scripts/build_executable.py
+
+dist/holodeck.pex:
+	$(PYTHON) -m pip install -q -e .[build]
+	$(PYTHON) scripts/build_pex.py
 
 # Refresh the tracked GitHub Pages demo bundle from demo.blend
 build-demo: dist/holodeck

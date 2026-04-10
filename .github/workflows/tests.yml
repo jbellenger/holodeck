@@ -62,7 +62,7 @@ jobs:
           ./holodeck-venv/bin/python -m pytest tests/test_blender_integration.py -v
 
       - name: Build standalone executable
-        run: make build-executable
+        run: make build
 
       - name: Validate executable commands with demo.blend
         run: |

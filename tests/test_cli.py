@@ -23,6 +23,9 @@ class TestCliHelp:
         assert "--blender BLENDER" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--port PORT" in captured.out
+        assert "render-frames\n  Render frames from a .blend file into an output directory." in captured.out
+        assert "  positional arguments:\n    blend_file" in captured.out
+        assert "  options:\n    -h, --help" in captured.out
 
     def test_top_level_help_includes_all_subcommand_options(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
@@ -38,6 +41,9 @@ class TestCliHelp:
         assert "--blender BLENDER" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--port PORT" in captured.out
+        assert "serve\n  Serve an output directory locally for development." in captured.out
+        assert "  positional arguments:\n    output_dir" in captured.out
+        assert "  options:\n    -h, --help" in captured.out
 
 
 class TestRenderFramesCommand:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 from .core import (
@@ -75,8 +76,76 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _build_comprehensive_help(command_parsers: list[argparse.ArgumentParser]) -> str:
-    sections = "\n\n".join(command_parser.format_help().strip() for command_parser in command_parsers)
+    sections = "\n\n".join(_format_subcommand_help(command_parser) for command_parser in command_parsers)
     return f"Full subcommand reference:\n\n{sections}"
+
+
+def _format_subcommand_help(parser: argparse.ArgumentParser) -> str:
+    formatter = parser._get_formatter()
+    width = formatter._width
+    command_name = parser.prog.split()[-1]
+    lines = [command_name]
+
+    if parser.description:
+        lines.extend(_wrap_text(parser.description, indent="  ", width=width))
+
+    lines.append("")
+    lines.extend(_format_usage_block(parser))
+
+    positional_actions = [
+        action for action in parser._positionals._group_actions if action.help != argparse.SUPPRESS
+    ]
+    optional_actions = [action for action in parser._optionals._group_actions if action.help != argparse.SUPPRESS]
+
+    if positional_actions:
+        lines.append("")
+        lines.append("  positional arguments:")
+        lines.extend(_format_action_block(parser, positional_actions, width=width))
+
+    if optional_actions:
+        lines.append("")
+        lines.append("  options:")
+        lines.extend(_format_action_block(parser, optional_actions, width=width))
+
+    return "\n".join(lines)
+
+
+def _format_usage_block(parser: argparse.ArgumentParser) -> list[str]:
+    usage_lines = parser.format_usage().strip().splitlines()
+    formatted_lines = [f"  {usage_lines[0]}"]
+    formatted_lines.extend(f"  {line}" for line in usage_lines[1:])
+    return formatted_lines
+
+
+def _format_action_block(
+    parser: argparse.ArgumentParser, actions: list[argparse.Action], width: int
+) -> list[str]:
+    formatter = parser._get_formatter()
+    invocations = [formatter._format_action_invocation(action) for action in actions]
+    help_texts = [formatter._expand_help(action) for action in actions]
+    help_column = max(max(len(invocation) for invocation in invocations) + 2, 16)
+    lines: list[str] = []
+
+    for invocation, help_text in zip(invocations, help_texts):
+        initial_indent = f"    {invocation.ljust(help_column)}"
+        subsequent_indent = "    " + (" " * help_column)
+        wrapper = textwrap.TextWrapper(
+            width=width,
+            initial_indent=initial_indent,
+            subsequent_indent=subsequent_indent,
+        )
+        lines.extend(wrapper.wrap(help_text))
+
+    return lines
+
+
+def _wrap_text(text: str, indent: str, width: int) -> list[str]:
+    return textwrap.wrap(
+        text,
+        width=width,
+        initial_indent=indent,
+        subsequent_indent=indent,
+    )
 
 
 def _add_blend_arguments(parser: argparse.ArgumentParser) -> None:

@@ -54,6 +54,8 @@ make setup
 make build
 ```
 
+That produces both `dist/holodeck` (PyInstaller) and `dist/holodeck.pex` (PEX).
+
 3. Build an export from a `.blend` file:
 
 ```bash
@@ -78,15 +80,25 @@ holodeck serve dist/demo --port 8000
 - `build`: render a `.blend` file into a static directory you can upload to a site
 - `serve`: preview an existing Holodeck directory locally
 
-## Standalone Executable
+## Standalone Executables
 
-You can build a single-file executable named `holodeck`:
+You can build both standalone executables:
 
 ```bash
 make build
 ```
 
-That produces `dist/holodeck`.
+That produces:
+
+- `dist/holodeck`: a PyInstaller single-file binary
+- `dist/holodeck.pex`: a PEX executable built from the same CLI entrypoint
+
+You can also build them individually:
+
+```bash
+make build-pyinstaller
+make build-pex
+```
 
 - The file is movable on the same machine.
 - The executable bundles Python, the player assets, and the Blender helper scripts.
@@ -98,7 +110,9 @@ That produces `dist/holodeck`.
 - `make setup`: create `holodeck-venv/` and install the package plus pytest
 - `make test`: run the full test suite
 - `make test-one TEST=test_add_frame`: run a focused test
-- `make build`: produce the standalone `dist/holodeck` binary with PyInstaller
+- `make build`: produce both `dist/holodeck` and `dist/holodeck.pex`
+- `make build-pyinstaller`: produce the standalone `dist/holodeck` binary with PyInstaller
+- `make build-pex`: produce the standalone `dist/holodeck.pex` executable with PEX
 - `make build-demo`: refresh the tracked `docs/` bundle from `demo.blend`
 - `make regen-blend-fixtures`: rebuild the tracked Blender test fixtures
 - `make serve-demo`: serve `docs/` on port `8000` using `dist/holodeck`

@@ -9,7 +9,7 @@ description = "CLI tool for rendering Blender presentations into static Holodeck
 requires-python = ">=3.11"
 
 [project.optional-dependencies]
-build = ["pyinstaller>=6.11"]
+build = ["pex", "pyinstaller>=6.11"]
 
 [project.scripts]
 holodeck = "holodeck.cli:main"
