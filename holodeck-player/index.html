@@ -11,7 +11,7 @@
 
       (async function() {
         const div = document.getElementById('div');
-        const {markers, frames, fps} = await fetch("manifest.json")
+        const {markers, frames, fps} = await fetch("../render/manifest.json")
           .then((resp) => { return resp.json() })
 
         const frameMillis = 1000/fps;
@@ -46,7 +46,8 @@
         function seek(frame) {
           frame = Math.max(0, frame);
           frame = Math.min(frame, frames.length - 1);
-          img.src = frames[frame] + `?cacheBust=${cacheBust}`;
+          // Prepend ../ since player is served from holodeck-player/ subdirectory
+          img.src = `../${frames[frame]}?cacheBust=${cacheBust}`;
           currentFrame = frame;
         }
 
@@ -67,7 +68,7 @@
               if (isLast || isMarker) {
                 playing = false;
                 return;
-              } 
+              }
               loop(nextFrame);
             }, frameMillis);
           }

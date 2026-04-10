@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "deckgen"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "holodeck"))
 
 from core.manifest_generator import ManifestGenerator
 
@@ -151,6 +151,38 @@ class TestManifestGeneratorEdgeCases:
         manifest = generator.generate_manifest(fps=60, markers=[])
 
         assert manifest["markers"] == []
+
+    def test_normalize_markers_offsets_by_frame_start(self):
+        """Marker frame numbers should become zero-based frame indexes."""
+        generator = ManifestGenerator()
+        generator.add_frame("render/0001.png")
+        generator.add_frame("render/0002.png")
+        generator.add_frame("render/0003.png")
+
+        markers = generator.normalize_markers([10, 12], frame_start=10)
+
+        assert markers == [0, 2]
+
+    def test_normalize_markers_sorts_markers(self):
+        """Markers should be sorted for player navigation."""
+        generator = ManifestGenerator()
+        generator.add_frame("render/0001.png")
+        generator.add_frame("render/0002.png")
+        generator.add_frame("render/0003.png")
+
+        markers = generator.normalize_markers([12, 10, 11], frame_start=10)
+
+        assert markers == [0, 1, 2]
+
+    def test_normalize_markers_filters_outside_render_range(self):
+        """Markers outside the rendered frame span should be ignored."""
+        generator = ManifestGenerator()
+        generator.add_frame("render/0001.png")
+        generator.add_frame("render/0002.png")
+
+        markers = generator.normalize_markers([9, 10, 11, 12], frame_start=10)
+
+        assert markers == [0, 1]
 
     def test_multiple_render_in_path(self):
         """Test path with multiple 'render' occurrences."""

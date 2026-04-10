@@ -12,7 +12,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 bl_info = {
-    "name": "deckgen",
+    "name": "Holodeck",
     "author": "James Bellenger",
     "description": "Generate a slide deck from a blender animation",
     "blender": (4, 4, 0),
@@ -25,8 +25,10 @@ import sys
 _modules = [
     "core",
     "core.manifest_generator",
+    "core.server",
     "handlers",
     "handlers.render_handlers",
+    "handlers.ui_panel",
 ]
 
 
@@ -40,10 +42,12 @@ def _reload_modules():
 
 def register():
     _reload_modules()
-    from .handlers import render_handlers
+    from .handlers import render_handlers, ui_panel
     render_handlers.register()
+    ui_panel.register()
 
 
 def unregister():
-    from .handlers import render_handlers
+    from .handlers import render_handlers, ui_panel
+    ui_panel.unregister()
     render_handlers.unregister()

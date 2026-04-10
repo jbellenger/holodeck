@@ -1,8 +1,9 @@
-.PHONY: test serve setup clean
+.PHONY: test serve setup clean build build-addon build-player
 
-VENV := deckgen-venv
+VENV := holodeck-venv
 PYTHON := $(VENV)/bin/python
 PYTEST := $(VENV)/bin/pytest
+VERSION := 1.0.0
 
 # Run unit tests
 test:
@@ -14,7 +15,7 @@ test-one:
 
 # Start the presentation server (quiet mode)
 serve:
-	python3 server.py
+	python3 holodeck-player/server.py
 
 # Set up the virtual environment
 setup:
@@ -27,3 +28,16 @@ clean:
 	rm -rf __pycache__ .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+# Build the Blender addon zip
+build-addon:
+	mkdir -p dist
+	cd holodeck && zip -r ../dist/holodeck-$(VERSION).zip . -x "*__pycache__*" "*.pyc"
+
+# Build the player webapp zip
+build-player:
+	mkdir -p dist
+	cd holodeck-player && zip -r ../dist/holodeck-player-$(VERSION).zip .
+
+# Build both artifacts
+build: build-addon build-player

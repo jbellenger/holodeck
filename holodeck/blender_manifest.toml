@@ -2,10 +2,10 @@ schema_version = "1.0.0"
 
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
-id = "deckgen"
+id = "holodeck"
 version = "1.0.0"
-name = "Deckgen"
-tagline = "This is another extension"
+name = "Holodeck"
+tagline = "Generate browser-playable slide decks from Blender animations"
 maintainer = "James Bellenger"
 # Supported types: "add-on", "theme"
 type = "add-on"
@@ -65,9 +65,8 @@ license = [
 
 # Optional: build settings.
 # https://docs.blender.org/manual/en/dev/advanced/extensions/command_line_arguments.html#command-line-args-extension-build
-# [build]
-# paths_exclude_pattern = [
-#   "__pycache__/",
-#   "/.git/",
-#   "/*.zip",
-# ]
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "*.pyc",
+]

@@ -3,6 +3,7 @@ Blender render event handlers.
 This module uses bpy but delegates business logic to ManifestGenerator.
 """
 import bpy
+from pathlib import Path
 from ..core import ManifestGenerator
 
 _generator = ManifestGenerator()
@@ -11,25 +12,34 @@ _generator = ManifestGenerator()
 def on_render_init(scene: bpy.types.Scene) -> None:
     """Called when render begins."""
     _generator.reset()
-    print(f"[deckgen] Render initialized")
+    print(f"[holodeck] Render initialized")
 
 
 def on_render_write(scene: bpy.types.Scene) -> None:
     """Called when each frame is written."""
     frame_path = scene.render.frame_path()
     _generator.add_frame(frame_path)
-    print(f"[deckgen] Recorded frame: {frame_path}")
+    print(f"[holodeck] Recorded frame: {frame_path}")
 
 
 def on_render_complete(scene: bpy.types.Scene) -> None:
     """Called when render completes."""
     fps = scene.render.fps
-    markers = [v.frame for k, v in scene.timeline_markers.items()]
+    marker_frames = [marker.frame for marker in scene.timeline_markers]
+    markers = _generator.normalize_markers(marker_frames, scene.frame_start)
 
     manifest = _generator.generate_manifest(fps, markers)
-    _generator.write_manifest(manifest)
 
-    print(f"[deckgen] Manifest written with {len(manifest['frames'])} frames")
+    # Write manifest next to the rendered frames
+    if _generator.frames:
+        first_frame = Path(_generator.frames[0])
+        manifest_path = first_frame.parent / "manifest.json"
+    else:
+        # Fallback: write next to blend file
+        manifest_path = Path(bpy.data.filepath).parent / "manifest.json"
+
+    _generator.write_manifest(manifest, str(manifest_path))
+    print(f"[holodeck] Manifest written to {manifest_path} with {len(manifest['frames'])} frames")
 
 
 def register() -> None:

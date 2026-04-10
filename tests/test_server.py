@@ -1,0 +1,315 @@
+"""Tests for the server module."""
+import tempfile
+import threading
+import time
+import urllib.request
+import urllib.error
+from pathlib import Path
+
+import pytest
+
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent / "holodeck"))
+
+from core.server import (
+    DEFAULT_PLAYER_DIR,
+    get_player_url,
+    validate_server_directory,
+    check_player_exists,
+    create_server,
+    deploy_player,
+    get_resources_dir,
+)
+
+
+class TestGetPlayerUrl:
+    """Tests for URL construction."""
+
+    def test_default_player_path(self):
+        url = get_player_url(8000)
+        assert url == f"http://localhost:8000/{DEFAULT_PLAYER_DIR}/"
+
+    def test_custom_port(self):
+        url = get_player_url(3000)
+        assert url == f"http://localhost:3000/{DEFAULT_PLAYER_DIR}/"
+
+    def test_custom_player_path(self):
+        url = get_player_url(8000, "my-player")
+        assert url == "http://localhost:8000/my-player/"
+
+
+class TestValidateServerDirectory:
+    """Tests for server directory validation."""
+
+    def test_empty_filepath_returns_none(self):
+        assert validate_server_directory("") is None
+        assert validate_server_directory(None) is None
+
+    def test_nonexistent_file_returns_none(self):
+        assert validate_server_directory("/nonexistent/path/file.blend") is None
+
+    def test_valid_filepath_returns_parent_dir(self, tmp_path):
+        # Create a fake blend file
+        blend_file = tmp_path / "test.blend"
+        blend_file.touch()
+
+        result = validate_server_directory(str(blend_file))
+        assert result == tmp_path
+
+
+class TestCheckPlayerExists:
+    """Tests for player directory validation."""
+
+    def test_missing_player_dir(self, tmp_path):
+        assert check_player_exists(tmp_path) is False
+
+    def test_empty_player_dir(self, tmp_path):
+        player_dir = tmp_path / DEFAULT_PLAYER_DIR
+        player_dir.mkdir()
+        assert check_player_exists(tmp_path) is False
+
+    def test_player_dir_without_index(self, tmp_path):
+        player_dir = tmp_path / DEFAULT_PLAYER_DIR
+        player_dir.mkdir()
+        (player_dir / "styles.css").touch()
+        assert check_player_exists(tmp_path) is False
+
+    def test_valid_player_dir(self, tmp_path):
+        player_dir = tmp_path / DEFAULT_PLAYER_DIR
+        player_dir.mkdir()
+        (player_dir / "index.html").write_text("<html></html>")
+        assert check_player_exists(tmp_path) is True
+
+    def test_custom_player_path(self, tmp_path):
+        player_dir = tmp_path / "custom-player"
+        player_dir.mkdir()
+        (player_dir / "index.html").write_text("<html></html>")
+        assert check_player_exists(tmp_path, "custom-player") is True
+
+
+class TestCreateServer:
+    """Integration tests for server creation."""
+
+    def test_server_serves_files(self, tmp_path):
+        # Create test content
+        (tmp_path / "test.txt").write_text("Hello, World!")
+
+        # Create and start server
+        server = create_server(0, tmp_path)  # Port 0 = random available port
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            # Give server time to start
+            time.sleep(0.1)
+
+            # Fetch the test file
+            url = f"http://localhost:{port}/test.txt"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                content = response.read().decode()
+                assert content == "Hello, World!"
+        finally:
+            server.shutdown()
+
+    def test_server_serves_index_html(self, tmp_path):
+        # Create player directory structure
+        player_dir = tmp_path / DEFAULT_PLAYER_DIR
+        player_dir.mkdir()
+        (player_dir / "index.html").write_text("<html><body>Player</body></html>")
+
+        # Create and start server
+        server = create_server(0, tmp_path)
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            time.sleep(0.1)
+
+            # Fetch the player index
+            url = f"http://localhost:{port}/{DEFAULT_PLAYER_DIR}/index.html"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                content = response.read().decode()
+                assert "Player" in content
+        finally:
+            server.shutdown()
+
+    def test_server_404_for_missing_file(self, tmp_path):
+        server = create_server(0, tmp_path)
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            time.sleep(0.1)
+
+            url = f"http://localhost:{port}/nonexistent.txt"
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                urllib.request.urlopen(url, timeout=5)
+            assert exc_info.value.code == 404
+        finally:
+            server.shutdown()
+
+    def test_server_serves_nested_paths(self, tmp_path):
+        # Create nested structure like render/manifest.json
+        render_dir = tmp_path / "render"
+        render_dir.mkdir()
+        (render_dir / "manifest.json").write_text('{"fps": 24}')
+
+        server = create_server(0, tmp_path)
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            time.sleep(0.1)
+
+            # This is the path the player will use: ../render/manifest.json
+            # from holodeck/ resolves to /render/manifest.json
+            url = f"http://localhost:{port}/render/manifest.json"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                content = response.read().decode()
+                assert '"fps": 24' in content
+        finally:
+            server.shutdown()
+
+
+class TestDeployPlayer:
+    """Tests for player file deployment."""
+
+    def test_resources_dir_exists(self):
+        resources = get_resources_dir()
+        assert resources.exists()
+        assert (resources / "index.html").exists()
+
+    def test_deploy_creates_directory(self, tmp_path):
+        player_dir = deploy_player(tmp_path)
+        assert player_dir.exists()
+        assert player_dir.is_dir()
+        assert player_dir.name == DEFAULT_PLAYER_DIR
+
+    def test_deploy_copies_index_html(self, tmp_path):
+        player_dir = deploy_player(tmp_path)
+        index_file = player_dir / "index.html"
+        assert index_file.exists()
+        content = index_file.read_text()
+        assert "<html>" in content
+        assert "manifest.json" in content
+
+    def test_deploy_custom_dirname(self, tmp_path):
+        player_dir = deploy_player(tmp_path, "my-player")
+        assert player_dir.name == "my-player"
+        assert (player_dir / "index.html").exists()
+
+    def test_deploy_overwrites_existing(self, tmp_path):
+        # Create existing player with old content
+        player_dir = tmp_path / DEFAULT_PLAYER_DIR
+        player_dir.mkdir()
+        (player_dir / "index.html").write_text("old content")
+
+        # Deploy should overwrite
+        deploy_player(tmp_path)
+        content = (player_dir / "index.html").read_text()
+        assert "old content" not in content
+        assert "<html>" in content
+
+    def test_deploy_idempotent(self, tmp_path):
+        # Deploy twice should work without errors
+        deploy_player(tmp_path)
+        deploy_player(tmp_path)
+        assert check_player_exists(tmp_path)
+
+    def test_deploy_raises_if_resources_missing(self, tmp_path, monkeypatch):
+        # Mock get_resources_dir to return a non-existent path
+        monkeypatch.setattr(
+            "core.server.get_resources_dir",
+            lambda: tmp_path / "nonexistent"
+        )
+        with pytest.raises(FileNotFoundError) as exc_info:
+            deploy_player(tmp_path)
+        assert "resources not found" in str(exc_info.value)
+
+
+class TestEndToEnd:
+    """End-to-end tests for the full server workflow."""
+
+    def test_deploy_and_serve_player(self, tmp_path):
+        """Test that deploying and serving allows accessing the player URL."""
+        # Deploy player
+        deploy_player(tmp_path)
+        assert check_player_exists(tmp_path)
+
+        # Start server
+        server = create_server(0, tmp_path)
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            time.sleep(0.1)
+
+            # Request the player URL (directory with trailing slash)
+            url = get_player_url(port)
+            with urllib.request.urlopen(url, timeout=5) as response:
+                assert response.status == 200
+                content = response.read().decode()
+                # Verify it's the player HTML
+                assert "<html>" in content
+                assert "manifest.json" in content
+        finally:
+            server.shutdown()
+
+    def test_full_workflow_with_manifest(self, tmp_path):
+        """Test the complete workflow: deploy, create manifest, serve, access."""
+        # Deploy player
+        deploy_player(tmp_path)
+
+        # Create render directory with manifest (simulating what render_handlers does)
+        render_dir = tmp_path / "render"
+        render_dir.mkdir()
+        manifest = {
+            "fps": 24,
+            "markers": [0, 24],
+            "frames": ["render/0001.png", "render/0002.png"]
+        }
+        import json
+        (render_dir / "manifest.json").write_text(json.dumps(manifest))
+
+        # Create dummy frame files
+        (render_dir / "0001.png").write_bytes(b"fake png 1")
+        (render_dir / "0002.png").write_bytes(b"fake png 2")
+
+        # Start server
+        server = create_server(0, tmp_path)
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            time.sleep(0.1)
+
+            # Access player
+            player_url = get_player_url(port)
+            with urllib.request.urlopen(player_url, timeout=5) as response:
+                assert response.status == 200
+
+            # Access manifest (the path the player uses)
+            manifest_url = f"http://localhost:{port}/render/manifest.json"
+            with urllib.request.urlopen(manifest_url, timeout=5) as response:
+                assert response.status == 200
+                data = json.loads(response.read().decode())
+                assert data["fps"] == 24
+
+            # Access frame (the path the player uses after prepending ../)
+            frame_url = f"http://localhost:{port}/render/0001.png"
+            with urllib.request.urlopen(frame_url, timeout=5) as response:
+                assert response.status == 200
+        finally:
+            server.shutdown()

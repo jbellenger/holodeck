@@ -22,6 +22,28 @@ class ManifestGenerator:
         if frame_path:
             self.frames.append(frame_path)
 
+    def normalize_markers(
+        self,
+        marker_frames: List[int],
+        frame_start: int,
+    ) -> List[int]:
+        """
+        Convert Blender timeline frame numbers into zero-based frame indexes.
+
+        Markers outside the rendered frame range are ignored.
+        """
+        frame_count = len(self.frames)
+        if frame_count == 0:
+            return []
+
+        marker_indexes = []
+        for frame in sorted(marker_frames):
+            frame_index = frame - frame_start
+            if 0 <= frame_index < frame_count:
+                marker_indexes.append(frame_index)
+
+        return marker_indexes
+
     def generate_manifest(
         self,
         fps: int,
@@ -32,7 +54,7 @@ class ManifestGenerator:
 
         Args:
             fps: Frames per second from scene
-            markers: List of marker frame numbers
+            markers: List of zero-based marker frame indexes
 
         Returns:
             The generated manifest dict
