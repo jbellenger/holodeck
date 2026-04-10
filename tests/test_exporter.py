@@ -47,6 +47,7 @@ class TestFinalizeRenderExport:
         assert manifest_path.exists()
         assert manifest["frames"] == ["render/0001.png", "render/0002.png"]
         assert manifest["markers"] == [0, 1]
+        assert "token" in manifest
 
     def test_get_render_dir(self, tmp_path):
         assert get_render_dir(tmp_path / "artifact") == tmp_path / "artifact" / "render"
@@ -67,6 +68,7 @@ class TestWriteManifestFromFrames:
 
         assert manifest["frames"] == ["render/0001.png", "render/0002.png"]
         assert manifest["markers"] == [0, 1]
+        assert "token" in manifest
 
     def test_write_manifest_from_frames_creates_manifest(self, tmp_path):
         manifest_path, manifest = write_manifest_from_frames(
@@ -83,3 +85,4 @@ class TestWriteManifestFromFrames:
         assert manifest_path == tmp_path / "artifact" / DEFAULT_MANIFEST_FILENAME
         assert manifest_path.exists()
         assert manifest["frames"] == ["render/0001.png", "render/0002.png"]
+        assert "token" in manifest

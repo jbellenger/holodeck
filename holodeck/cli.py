@@ -6,6 +6,7 @@ import argparse
 import subprocess
 import sys
 import textwrap
+import webbrowser
 from pathlib import Path
 
 from .core import (
@@ -66,6 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=8000,
         help="Port to bind the local HTTP server to.",
+    )
+    serve_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Do not open the player URL in a web browser.",
     )
     serve_parser.set_defaults(func=serve_command)
     command_parsers.append(serve_parser)
@@ -246,6 +252,12 @@ def serve_command(args: argparse.Namespace) -> int:
     server = create_server(args.port, output_dir)
     url = get_player_url(server.server_address[1])
     print(f"Serving {output_dir} at {url}")
+
+    if not args.no_open:
+        try:
+            webbrowser.open(url)
+        except webbrowser.Error as exc:
+            print(f"warning: could not open browser: {exc}", file=sys.stderr)
 
     try:
         server.serve_forever()

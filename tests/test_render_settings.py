@@ -1,5 +1,6 @@
 from holodeck.core.render_settings import (
     HOLODECK_RENDER_FILE_FORMAT,
+    HOLODECK_RENDER_MEDIA_TYPE,
     configure_scene_for_holodeck_render,
 )
 
@@ -31,15 +32,42 @@ class _RejectingImageSettings:
         raise TypeError("enum not found")
 
 
+class _VideoImageSettings:
+    def __init__(self):
+        self.media_type = "VIDEO"
+        self._file_format = "FFMPEG"
+
+    @property
+    def file_format(self):
+        return self._file_format
+
+    @file_format.setter
+    def file_format(self, value):
+        if value == HOLODECK_RENDER_FILE_FORMAT and self.media_type != HOLODECK_RENDER_MEDIA_TYPE:
+            raise TypeError(f'enum "{value}" not found in (\'FFMPEG\')')
+        self._file_format = value
+
+
 class _RejectingRender(_FakeRender):
     def __init__(self):
         super().__init__()
         self.image_settings = _RejectingImageSettings()
 
 
+class _VideoRender(_FakeRender):
+    def __init__(self):
+        super().__init__()
+        self.image_settings = _VideoImageSettings()
+
+
 class _RejectingScene:
     def __init__(self):
         self.render = _RejectingRender()
+
+
+class _VideoScene:
+    def __init__(self):
+        self.render = _VideoRender()
 
 
 class TestConfigureSceneForHolodeckRender:
@@ -51,6 +79,14 @@ class TestConfigureSceneForHolodeckRender:
 
         assert scene.render.filepath == str(render_dir) + "/"
         assert scene.render.use_file_extension is True
+        assert scene.render.image_settings.file_format == HOLODECK_RENDER_FILE_FORMAT
+
+    def test_converts_video_output_to_image_sequence_before_setting_avif(self, tmp_path):
+        scene = _VideoScene()
+
+        configure_scene_for_holodeck_render(scene, tmp_path / "render")
+
+        assert scene.render.image_settings.media_type == HOLODECK_RENDER_MEDIA_TYPE
         assert scene.render.image_settings.file_format == HOLODECK_RENDER_FILE_FORMAT
 
     def test_raises_when_blender_cannot_write_avif(self, tmp_path):

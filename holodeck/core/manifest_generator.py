@@ -2,6 +2,7 @@
 Business logic for manifest generation.
 This module contains NO bpy imports and can be tested independently.
 """
+import hashlib
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -60,11 +61,18 @@ class ManifestGenerator:
         Returns:
             The generated manifest dict
         """
-        return {
+        manifest = {
             "fps": fps,
             "markers": markers,
             "frames": self._relativize_paths(self.frames, root_dir=root_dir),
         }
+        manifest["token"] = self._build_token(manifest)
+        return manifest
+
+    def _build_token(self, manifest: Dict[str, Any]) -> str:
+        """Build a stable token that changes whenever manifest content changes."""
+        token_payload = json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        return hashlib.sha256(token_payload).hexdigest()[:12]
 
     def _relativize_paths(
         self,

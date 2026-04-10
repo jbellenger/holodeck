@@ -146,6 +146,44 @@ class TestCreateServer:
         finally:
             server.shutdown()
 
+    def test_server_marks_frames_cacheable(self, tmp_path):
+        render_dir = tmp_path / "render"
+        render_dir.mkdir()
+        (render_dir / "0001.png").write_bytes(b"frame")
+
+        server = create_server(0, tmp_path)
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            time.sleep(0.1)
+
+            url = f"http://localhost:{port}/render/0001.png?v=token123"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+        finally:
+            server.shutdown()
+
+    def test_server_marks_manifest_uncached(self, tmp_path):
+        (tmp_path / "manifest.json").write_text('{"fps": 24}')
+
+        server = create_server(0, tmp_path)
+        port = server.server_address[1]
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            time.sleep(0.1)
+
+            url = f"http://localhost:{port}/manifest.json"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                assert response.headers["Cache-Control"] == "no-cache"
+        finally:
+            server.shutdown()
+
 
 class TestDeployPlayer:
     """Tests for player file deployment."""
@@ -154,6 +192,35 @@ class TestDeployPlayer:
         resources = get_resources_dir()
         assert resources.exists()
         assert (resources / "index.html").exists()
+
+    def test_resources_dir_prefers_canonical_player_directory(self, tmp_path, monkeypatch):
+        package_root = tmp_path / "repo" / "holodeck"
+        package_root.mkdir(parents=True)
+        canonical_player_dir = package_root.parent / "holodeck-player"
+        canonical_player_dir.mkdir()
+        (canonical_player_dir / "index.html").write_text("<html></html>")
+
+        monkeypatch.setattr("holodeck.core.server.get_package_root", lambda: package_root)
+        monkeypatch.setattr(
+            "holodeck.core.server.get_package_path",
+            lambda *parts: package_root.joinpath(*parts),
+        )
+
+        assert get_resources_dir() == canonical_player_dir
+
+    def test_resources_dir_falls_back_to_packaged_resources(self, tmp_path, monkeypatch):
+        package_root = tmp_path / "repo" / "holodeck"
+        resources_dir = package_root / "resources"
+        resources_dir.mkdir(parents=True)
+        (resources_dir / "index.html").write_text("<html></html>")
+
+        monkeypatch.setattr("holodeck.core.server.get_package_root", lambda: package_root)
+        monkeypatch.setattr(
+            "holodeck.core.server.get_package_path",
+            lambda *parts: package_root.joinpath(*parts),
+        )
+
+        assert get_resources_dir() == resources_dir
 
     def test_deploy_creates_directory(self, tmp_path):
         player_dir = deploy_player(tmp_path)

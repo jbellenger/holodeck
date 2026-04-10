@@ -8,23 +8,48 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Blender runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1
+
+      - name: Install Blender
+        run: |
+          curl -fsSL https://download.blender.org/release/Blender5.1/blender-5.1.0-linux-x64.tar.xz -o "$RUNNER_TEMP/blender.tar.xz"
+          mkdir -p "$RUNNER_TEMP/blender"
+          tar -xf "$RUNNER_TEMP/blender.tar.xz" -C "$RUNNER_TEMP/blender" --strip-components=1
+
+      - name: Set up build environment
+        run: make setup
+
+      - name: Build Pages site
+        run: |
+          set -euxo pipefail
+
+          site_dir="$RUNNER_TEMP/pages-site"
+          blender_bin="$RUNNER_TEMP/blender/blender"
+
+          rm -rf "$site_dir"
+          ./holodeck-venv/bin/python -m holodeck build demo.blend "$site_dir" --blender "$blender_bin"
+          touch "$site_dir/.nojekyll"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -32,8 +57,18 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: ${{ runner.temp }}/pages-site
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -64,6 +64,7 @@ class TestManifestGenerator:
         assert "fps" in manifest
         assert "markers" in manifest
         assert "frames" in manifest
+        assert "token" in manifest
 
     def test_generate_manifest_fps(self):
         """Test fps is captured correctly."""
@@ -74,6 +75,23 @@ class TestManifestGenerator:
         """Test markers are captured correctly."""
         manifest = self.generator.generate_manifest(fps=60, markers=[30, 60, 90])
         assert manifest["markers"] == [30, 60, 90]
+
+    def test_generate_manifest_token_is_stable_for_same_content(self):
+        self.generator.add_frame("render/0001.png")
+        self.generator.add_frame("render/0002.png")
+
+        first_manifest = self.generator.generate_manifest(fps=60, markers=[1])
+        second_manifest = self.generator.generate_manifest(fps=60, markers=[1])
+
+        assert first_manifest["token"] == second_manifest["token"]
+
+    def test_generate_manifest_token_changes_when_content_changes(self):
+        self.generator.add_frame("render/0001.png")
+
+        first_manifest = self.generator.generate_manifest(fps=24, markers=[])
+        second_manifest = self.generator.generate_manifest(fps=30, markers=[])
+
+        assert first_manifest["token"] != second_manifest["token"]
 
     def test_relativize_paths_strips_prefix(self):
         """Test that absolute paths are relativized to the export root."""
@@ -126,6 +144,7 @@ class TestManifestGenerator:
             assert data["fps"] == 60
             assert data["markers"] == [50]
             assert data["frames"] == ["render/0001.png", "render/0002.png"]
+            assert "token" in data
 
     def test_write_manifest_is_formatted(self):
         """Test that JSON output is indented for readability."""

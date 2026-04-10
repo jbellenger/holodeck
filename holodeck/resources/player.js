@@ -1,8 +1,14 @@
-const cacheBust = performance.now();
 const preloadConcurrency = 6;
 
+class CancelledActionError extends Error {
+  constructor() {
+    super("Player action was cancelled");
+    this.name = "CancelledActionError";
+  }
+}
+
 (async function () {
-  const { markers, frames, fps } = await fetch("./manifest.json").then((resp) => resp.json());
+  const { markers, frames, fps, token } = await fetch("./manifest.json").then((resp) => resp.json());
   const frameMillis = 1000 / fps;
   const img = document.getElementById("image");
   const status = document.getElementById("status");
@@ -11,7 +17,9 @@ const preloadConcurrency = 6;
   let currentFrame = 0;
   let playing = false;
   let ready = false;
-  let frameSources = new Array(frames.length).fill(null);
+  const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
+  const warmedFrames = new Array(frameUrls.length).fill(false);
+  const frameWarmPromises = new Array(frameUrls.length).fill(null);
 
   function showStatus(message) {
     status.textContent = message;
@@ -27,6 +35,37 @@ const preloadConcurrency = 6;
     hideStatus();
   }
 
+  function startAction() {
+    lastActionId += 1;
+    return lastActionId;
+  }
+
+  function isActionActive(actionId) {
+    return actionId === lastActionId;
+  }
+
+  function assertActionActive(actionId) {
+    if (!isActionActive(actionId)) {
+      throw new CancelledActionError();
+    }
+  }
+
+  function assertActionIfProvided(actionId) {
+    if (actionId !== null && actionId !== undefined) {
+      assertActionActive(actionId);
+    }
+  }
+
+  function buildFrameUrl(framePath, manifestToken) {
+    if (!manifestToken) {
+      return framePath;
+    }
+
+    const frameUrl = new URL(framePath, window.location.href);
+    frameUrl.searchParams.set("v", manifestToken);
+    return frameUrl.toString();
+  }
+
   function getSegmentEnd(frame) {
     const nextMarker = markers.find((element) => element > frame);
     return nextMarker === undefined ? frames.length - 1 : nextMarker;
@@ -40,32 +79,44 @@ const preloadConcurrency = 6;
     };
   }
 
-  async function preloadFrame(frameIndex) {
-    if (frameSources[frameIndex]) {
-      return frameSources[frameIndex];
+  async function warmFrame(frameIndex) {
+    if (warmedFrames[frameIndex]) {
+      return;
     }
 
-    const frameUrl = `${frames[frameIndex]}?cacheBust=${cacheBust}`;
-    const response = await fetch(frameUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to preload frame ${frameUrl}: ${response.status}`);
+    if (frameWarmPromises[frameIndex]) {
+      return frameWarmPromises[frameIndex];
     }
 
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const preloadImage = new Image();
-    preloadImage.src = objectUrl;
-    await preloadImage.decode();
-    frameSources[frameIndex] = objectUrl;
-    return objectUrl;
+    const warmPromise = (async () => {
+      const response = await fetch(frameUrls[frameIndex], { cache: "force-cache" });
+      if (!response.ok) {
+        throw new Error(`Failed to preload frame ${frameUrls[frameIndex]}: ${response.status}`);
+      }
+
+      await response.blob();
+      warmedFrames[frameIndex] = true;
+    })();
+
+    frameWarmPromises[frameIndex] = warmPromise.finally(() => {
+      frameWarmPromises[frameIndex] = null;
+    });
+
+    return frameWarmPromises[frameIndex];
   }
 
-  async function ensureSegmentLoaded(frame) {
+  async function warmSegment(frame, { actionId = null, showProgress = false, excludeFrame = null } = {}) {
+    assertActionIfProvided(actionId);
+
     const { start, end } = getSegmentBounds(frame);
     const pendingFrames = [];
 
     for (let frameIndex = start; frameIndex <= end; frameIndex += 1) {
-      if (!frameSources[frameIndex]) {
+      if (frameIndex === excludeFrame) {
+        continue;
+      }
+
+      if (!warmedFrames[frameIndex]) {
         pendingFrames.push(frameIndex);
       }
     }
@@ -76,115 +127,139 @@ const preloadConcurrency = 6;
 
     let nextPendingIndex = 0;
     let completed = 0;
-    showStatus(`Loading frames ${completed}/${pendingFrames.length}`);
+    if (showProgress) {
+      showStatus(`Loading frames ${completed}/${pendingFrames.length}`);
+    }
 
     async function worker() {
       while (nextPendingIndex < pendingFrames.length) {
+        assertActionIfProvided(actionId);
         const pendingIndex = nextPendingIndex;
         nextPendingIndex += 1;
         const frameIndex = pendingFrames[pendingIndex];
-        await preloadFrame(frameIndex);
+        await warmFrame(frameIndex);
+        assertActionIfProvided(actionId);
         completed += 1;
-        showStatus(`Loading frames ${completed}/${pendingFrames.length}`);
+        if (showProgress) {
+          showStatus(`Loading frames ${completed}/${pendingFrames.length}`);
+        }
       }
     }
 
     const workerCount = Math.min(preloadConcurrency, pendingFrames.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    assertActionIfProvided(actionId);
     return { start, end };
   }
 
-  function releaseFramesOutside(start, end) {
-    for (let frameIndex = 0; frameIndex < frameSources.length; frameIndex += 1) {
-      const frameSource = frameSources[frameIndex];
-      if (!frameSource) {
-        continue;
-      }
-      if (frameIndex >= start && frameIndex <= end) {
-        continue;
-      }
-
-      URL.revokeObjectURL(frameSource);
-      frameSources[frameIndex] = null;
-    }
-  }
-
-  async function seek(frame) {
-    if (frames.length === 0) {
-      return;
+  function displayFrame(frame) {
+    if (frameUrls.length === 0) {
+      return null;
     }
 
-    const { start, end } = await ensureSegmentLoaded(frame);
-    const clampedFrame = Math.max(0, Math.min(frame, frameSources.length - 1));
-
-    img.src = frameSources[clampedFrame];
+    const clampedFrame = Math.max(0, Math.min(frame, frameUrls.length - 1));
+    img.src = frameUrls[clampedFrame];
     currentFrame = clampedFrame;
-    releaseFramesOutside(start, end);
 
     if (ready) {
       hideStatus();
     }
+
+    return clampedFrame;
   }
 
-  async function jump(direction) {
+  async function waitForDisplayedFrame(frame) {
+    const clampedFrame = displayFrame(frame);
+    if (clampedFrame === null) {
+      return;
+    }
+
+    await img.decode();
+  }
+
+  function seek(frame) {
+    const clampedFrame = displayFrame(frame);
+    if (clampedFrame === null) {
+      return;
+    }
+
+    runAsync(() => warmSegment(clampedFrame, { excludeFrame: clampedFrame }));
+  }
+
+  function jump(direction) {
     if (!ready) return;
 
     if (direction === 1) {
       const idx = markers.find((element) => element > currentFrame);
       if (idx === undefined) {
-        await seek(frameSources.length - 1);
+        seek(frameUrls.length - 1);
       } else {
-        await seek(idx);
+        seek(idx);
       }
     } else if (direction === -1) {
       const idx = markers.findLast((element) => element < currentFrame);
       if (idx === undefined) {
-        await seek(0);
+        seek(0);
       } else {
-        await seek(idx);
+        seek(idx);
       }
     } else {
       throw new Error(`invalid jump direction: ${direction}`);
     }
   }
 
-  async function play(startFrame) {
-    await seek(startFrame);
+  async function play(startFrame, actionId) {
+    const clampedFrame = displayFrame(startFrame);
+    if (clampedFrame === null) {
+      return;
+    }
 
     if (!playing) return;
-    let actionId = ++lastActionId;
+    assertActionActive(actionId);
+    await warmSegment(clampedFrame, {
+      actionId,
+      showProgress: true,
+      excludeFrame: clampedFrame,
+    });
+    hideStatus();
+
     const segmentEnd = getSegmentEnd(currentFrame);
 
     function loop(frame) {
-      actionId = ++lastActionId;
       setTimeout(() => {
-        if (actionId !== lastActionId) return;
-        const nextFrame = frame + 1;
+        if (!playing || !isActionActive(actionId)) {
+          return;
+        }
 
-        if (nextFrame > segmentEnd || nextFrame >= frameSources.length) {
+        const nextFrame = frame + 1;
+        if (nextFrame > segmentEnd || nextFrame >= frameUrls.length) {
           playing = false;
           return;
         }
 
-        img.src = frameSources[nextFrame];
+        img.src = frameUrls[nextFrame];
         currentFrame = nextFrame;
-        releaseFramesOutside(nextFrame, segmentEnd);
 
-        const isLast = nextFrame === frameSources.length - 1;
+        const isLast = nextFrame === frameUrls.length - 1;
         const isMarker = markers.includes(nextFrame);
         if (isLast || isMarker) {
           playing = false;
           return;
         }
+
         loop(nextFrame);
       }, frameMillis);
     }
 
-    loop(startFrame);
+    loop(currentFrame);
   }
 
   function runAsync(action) {
     action().catch((error) => {
+      if (error instanceof CancelledActionError) {
+        return;
+      }
+
       playing = false;
       showStatus("Failed to load frames");
       console.error(error);
@@ -196,17 +271,28 @@ const preloadConcurrency = 6;
 
     switch (event.code) {
       case "ArrowLeft":
-        runAsync(() => jump(-1));
+        playing = false;
+        startAction();
+        jump(-1);
         break;
       case "ArrowRight":
-        runAsync(() => jump(1));
+        playing = false;
+        startAction();
+        jump(1);
         break;
       case "Space":
-        playing = !playing;
-        ++lastActionId;
-        if (playing) {
-          runAsync(() => play(currentFrame));
+        if (event.repeat) {
+          break;
         }
+
+        if (playing) {
+          playing = false;
+          startAction();
+          break;
+        }
+
+        playing = true;
+        runAsync(() => play(currentFrame, startAction()));
         break;
     }
   });
@@ -217,19 +303,15 @@ const preloadConcurrency = 6;
       return;
     }
 
-    await seek(0);
+    const initialActionId = startAction();
+    await warmFrame(0);
+    assertActionActive(initialActionId);
+    await waitForDisplayedFrame(0);
     ready = true;
     showPlayer();
+    runAsync(() => warmSegment(0, { excludeFrame: 0 }));
   } catch (error) {
     showStatus("Failed to load frames");
     throw error;
   }
-
-  addEventListener("beforeunload", () => {
-    frameSources.forEach((frameSource) => {
-      if (frameSource) {
-        URL.revokeObjectURL(frameSource);
-      }
-    });
-  });
 })();

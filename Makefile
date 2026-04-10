@@ -1,4 +1,4 @@
-.PHONY: test test-one setup clean build build-pyinstaller build-pex build-demo serve-demo regen-blend-fixtures
+.PHONY: test test-one setup clean build build-pyinstaller build-pex build-demo serve-demo regen-blend-fixtures sync-player-assets
 
 VENV := holodeck-venv
 PYTHON := $(VENV)/bin/python
@@ -42,21 +42,24 @@ build-pex:
 	rm -f dist/holodeck.pex
 	$(MAKE) dist/holodeck.pex
 
-dist/holodeck:
+sync-player-assets:
+	python3 scripts/sync_player_assets.py
+
+dist/holodeck: sync-player-assets
 	$(PYTHON) -m pip install -q -e .[build]
 	$(PYTHON) scripts/build_executable.py
 
-dist/holodeck.pex:
+dist/holodeck.pex: sync-player-assets
 	$(PYTHON) -m pip install -q -e .[build]
 	$(PYTHON) scripts/build_pex.py
 
-# Refresh the tracked GitHub Pages demo bundle from demo.blend
+# Regenerate the local demo bundle from demo.blend
 build-demo: dist/holodeck
 	rm -rf $(DEMO_OUTPUT)
 	./dist/holodeck build demo.blend $(DEMO_OUTPUT) --blender $(BLENDER)
 	touch $(DEMO_OUTPUT)/.nojekyll
 
-# Start the presentation server for the tracked demo bundle
+# Start the presentation server for the local demo bundle
 serve-demo: dist/holodeck
 	./dist/holodeck serve $(DEMO_OUTPUT) --port $(PORT)
 

@@ -23,6 +23,7 @@ class TestCliHelp:
         assert "--blender BLENDER" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--port PORT" in captured.out
+        assert "--no-open" in captured.out
         assert "render-frames\n  Render frames from a .blend file into an output directory." in captured.out
         assert "  positional arguments:\n    blend_file" in captured.out
         assert "  options:\n    -h, --help" in captured.out
@@ -41,6 +42,7 @@ class TestCliHelp:
         assert "--blender BLENDER" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--port PORT" in captured.out
+        assert "--no-open" in captured.out
         assert "serve\n  Serve an output directory locally for development." in captured.out
         assert "  positional arguments:\n    output_dir" in captured.out
         assert "  options:\n    -h, --help" in captured.out
@@ -98,6 +100,7 @@ class TestGenManifestCommand:
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["frames"] == ["render/0001.png", "render/0002.png"]
         assert manifest["markers"] == [0, 1]
+        assert "token" in manifest
 
     def test_fails_when_expected_frames_are_missing(self, monkeypatch, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -148,3 +151,52 @@ class TestBuildCommand:
             ("render", str(blend_file), str(output_dir)),
             ("manifest", str(blend_file), str(output_dir)),
         ]
+
+
+class TestServeCommand:
+    class _FakeServer:
+        def __init__(self, port):
+            self.server_address = ("", port)
+            self.serve_forever_called = False
+            self.server_close_called = False
+
+        def serve_forever(self):
+            self.serve_forever_called = True
+
+        def server_close(self):
+            self.server_close_called = True
+
+    def test_opens_browser_by_default(self, monkeypatch, tmp_path):
+        output_dir = tmp_path / "dist"
+        output_dir.mkdir()
+        (output_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+        server = self._FakeServer(port=8123)
+        opened_urls = []
+
+        monkeypatch.setattr("holodeck.cli.create_server", lambda port, directory: server)
+        monkeypatch.setattr("holodeck.cli.webbrowser.open", lambda url: opened_urls.append(url) or True)
+
+        exit_code = main(["serve", str(output_dir)])
+
+        assert exit_code == 0
+        assert opened_urls == ["http://localhost:8123/"]
+        assert server.serve_forever_called is True
+        assert server.server_close_called is True
+
+    def test_skips_browser_open_when_disabled(self, monkeypatch, tmp_path):
+        output_dir = tmp_path / "dist"
+        output_dir.mkdir()
+        (output_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+        server = self._FakeServer(port=8123)
+
+        monkeypatch.setattr("holodeck.cli.create_server", lambda port, directory: server)
+        monkeypatch.setattr(
+            "holodeck.cli.webbrowser.open",
+            lambda url: pytest.fail("webbrowser.open should not be called when --no-open is set"),
+        )
+
+        exit_code = main(["serve", str(output_dir), "--no-open"])
+
+        assert exit_code == 0
+        assert server.serve_forever_called is True
+        assert server.server_close_called is True

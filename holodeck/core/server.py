@@ -6,11 +6,13 @@ import http.server
 import shutil
 import socketserver
 from pathlib import Path
+from urllib.parse import urlparse
 
-from .runtime import get_package_path
+from .runtime import get_package_path, get_package_root
 
 # Default player directory name (minimal footprint)
 DEFAULT_PLAYER_DIR = ""
+CANONICAL_PLAYER_DIRNAME = "holodeck-player"
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -18,6 +20,22 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
+
+    def end_headers(self):
+        self.send_header("Cache-Control", self._get_cache_control_header())
+        super().end_headers()
+
+    def _get_cache_control_header(self) -> str:
+        request_path = urlparse(self.path).path
+        suffix = Path(request_path).suffix.lower()
+
+        if request_path.endswith("/") or suffix in {".html", ".json", ".js", ".css"}:
+            return "no-cache"
+
+        if suffix in {".png", ".jpg", ".jpeg", ".webp", ".avif", ".gif"}:
+            return "public, max-age=31536000, immutable"
+
+        return "public, max-age=3600"
 
 
 class QuietServer(socketserver.TCPServer):
@@ -31,7 +49,11 @@ class QuietServer(socketserver.TCPServer):
 
 
 def get_resources_dir() -> Path:
-    """Get the path to the bundled resources directory."""
+    """Get the player asset directory, preferring the canonical source tree when available."""
+    package_root = get_package_root()
+    canonical_player_dir = package_root.parent / CANONICAL_PLAYER_DIRNAME
+    if canonical_player_dir.is_dir() and (canonical_player_dir / "index.html").is_file():
+        return canonical_player_dir
     return get_package_path("resources")
 
 

@@ -6,6 +6,22 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 
 def test_player_assets_match_packaged_resources():
     for asset_name in ("index.html", "player.js", "styles.css"):
-        player_asset = (ROOT_DIR / "holodeck-player" / asset_name).read_text(encoding="utf-8")
+        canonical_asset = (ROOT_DIR / "holodeck-player" / asset_name).read_text(encoding="utf-8")
         resource_asset = (ROOT_DIR / "holodeck" / "resources" / asset_name).read_text(encoding="utf-8")
-        assert player_asset == resource_asset
+        assert resource_asset == canonical_asset
+
+
+def test_demo_player_assets_match_packaged_resources():
+    for asset_name in ("index.html", "player.js", "styles.css"):
+        demo_asset = (ROOT_DIR / "docs" / asset_name).read_text(encoding="utf-8")
+        resource_asset = (ROOT_DIR / "holodeck" / "resources" / asset_name).read_text(encoding="utf-8")
+        assert demo_asset == resource_asset
+
+
+def test_player_assets_use_relative_paths_for_static_hosts():
+    index_html = (ROOT_DIR / "holodeck-player" / "index.html").read_text(encoding="utf-8")
+    player_js = (ROOT_DIR / "holodeck-player" / "player.js").read_text(encoding="utf-8")
+
+    assert 'href="styles.css"' in index_html
+    assert 'src="player.js"' in index_html
+    assert 'fetch("./manifest.json")' in player_js
