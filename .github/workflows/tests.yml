@@ -42,6 +42,11 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install Blender runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1
+
       - name: Install Blender
         run: |
           curl -fsSL https://download.blender.org/release/Blender5.1/blender-5.1.0-linux-x64.tar.xz -o "$RUNNER_TEMP/blender.tar.xz"
