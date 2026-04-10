@@ -8,10 +8,7 @@ from pathlib import Path
 
 import pytest
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "holodeck"))
-
-from core.manifest_generator import ManifestGenerator
+from holodeck.core.manifest_generator import ManifestGenerator
 
 
 class TestManifestGenerator:

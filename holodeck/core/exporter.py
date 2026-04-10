@@ -68,3 +68,39 @@ def finalize_render_export(
     manifest_path = resolved_root / DEFAULT_MANIFEST_FILENAME
     generator.write_manifest(manifest, str(manifest_path))
     return manifest_path, manifest
+
+
+def build_manifest_from_frames(
+    frame_paths: Iterable[str],
+    fps: int,
+    marker_frames: Iterable[int],
+    frame_start: int,
+    export_root: Path,
+) -> Dict[str, Any]:
+    """Build a manifest from a fixed list of rendered frame paths."""
+    generator = ManifestGenerator()
+    for frame_path in frame_paths:
+        generator.add_frame(frame_path)
+
+    markers = generator.normalize_markers(list(marker_frames), frame_start)
+    return generator.generate_manifest(fps, markers, root_dir=export_root)
+
+
+def write_manifest_from_frames(
+    frame_paths: Iterable[str],
+    fps: int,
+    marker_frames: Iterable[int],
+    frame_start: int,
+    export_root: Path,
+) -> Tuple[Path, Dict[str, Any]]:
+    """Write a manifest from a fixed list of rendered frame paths."""
+    manifest = build_manifest_from_frames(
+        frame_paths=frame_paths,
+        fps=fps,
+        marker_frames=marker_frames,
+        frame_start=frame_start,
+        export_root=export_root,
+    )
+    manifest_path = Path(export_root) / DEFAULT_MANIFEST_FILENAME
+    ManifestGenerator().write_manifest(manifest, str(manifest_path))
+    return manifest_path, manifest

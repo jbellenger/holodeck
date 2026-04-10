@@ -28,3 +28,84 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  blender-cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Blender
+        run: |
+          curl -fsSL https://download.blender.org/release/Blender5.1/blender-5.1.0-linux-x64.tar.xz -o "$RUNNER_TEMP/blender.tar.xz"
+          mkdir -p "$RUNNER_TEMP/blender"
+          tar -xf "$RUNNER_TEMP/blender.tar.xz" -C "$RUNNER_TEMP/blender" --strip-components=1
+
+      - name: Set up build environment
+        run: make setup
+
+      - name: Run Blender integration tests
+        run: |
+          export PATH="$RUNNER_TEMP/blender:$PATH"
+          ./holodeck-venv/bin/python -m pytest tests/test_blender_integration.py -v
+
+      - name: Build standalone executable
+        run: make build-executable
+
+      - name: Validate executable commands with demo.blend
+        run: |
+          set -euxo pipefail
+
+          render_dir="$RUNNER_TEMP/holodeck-render"
+          build_dir="$RUNNER_TEMP/holodeck-build"
+          blender_bin="$RUNNER_TEMP/blender/blender"
+
+          ./dist/holodeck render-frames demo.blend "$render_dir" --blender "$blender_bin"
+          test -f "$render_dir/index.html"
+          test -f "$render_dir/player.js"
+          test -f "$render_dir/styles.css"
+          test ! -f "$render_dir/manifest.json"
+          find "$render_dir/render" -type f | grep -q .
+
+          ./dist/holodeck gen-manifest demo.blend "$render_dir" --blender "$blender_bin"
+          test -f "$render_dir/manifest.json"
+
+          python3 - <<'PY' "$render_dir/manifest.json"
+          import json
+          import pathlib
+          import sys
+
+          manifest_path = pathlib.Path(sys.argv[1])
+          data = json.loads(manifest_path.read_text(encoding="utf-8"))
+          assert data["fps"] > 0
+          assert len(data["frames"]) > 0
+          assert len(data["markers"]) > 0
+          PY
+
+          ./dist/holodeck build demo.blend "$build_dir" --blender "$blender_bin"
+          test -f "$build_dir/manifest.json"
+          test -f "$build_dir/index.html"
+          find "$build_dir/render" -type f | grep -q .
+
+          ./dist/holodeck serve "$build_dir" --port 8765 >"$RUNNER_TEMP/holodeck-serve.log" 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid || true' EXIT
+
+          for _ in $(seq 1 20); do
+            if curl --silent --fail http://127.0.0.1:8765/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          curl --fail http://127.0.0.1:8765/
+          curl --fail http://127.0.0.1:8765/manifest.json
+          kill $server_pid
+          wait $server_pid || true

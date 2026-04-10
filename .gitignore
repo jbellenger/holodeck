@@ -34,3 +34,8 @@ manifest-bak.json
 
 # Build output
 dist/
+build/
+*.egg-info/
+
+# Local planning notes
+plan.md

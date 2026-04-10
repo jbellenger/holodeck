@@ -1,17 +1,15 @@
 """Tests for shared Holodeck export helpers."""
 from pathlib import Path
 
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "holodeck"))
-
-from core import (
+from holodeck.core import (
     DEFAULT_MANIFEST_FILENAME,
+    build_manifest_from_frames,
     finalize_render_export,
     get_render_dir,
     resolve_export_root,
+    write_manifest_from_frames,
 )
-from core.manifest_generator import ManifestGenerator
+from holodeck.core.manifest_generator import ManifestGenerator
 
 
 class TestResolveExportRoot:
@@ -52,3 +50,36 @@ class TestFinalizeRenderExport:
 
     def test_get_render_dir(self, tmp_path):
         assert get_render_dir(tmp_path / "artifact") == tmp_path / "artifact" / "render"
+
+
+class TestWriteManifestFromFrames:
+    def test_build_manifest_from_frames_uses_frame_start_for_markers(self, tmp_path):
+        manifest = build_manifest_from_frames(
+            frame_paths=[
+                str(tmp_path / "artifact" / "render" / "0001.png"),
+                str(tmp_path / "artifact" / "render" / "0002.png"),
+            ],
+            fps=30,
+            marker_frames=[100, 101, 105],
+            frame_start=100,
+            export_root=tmp_path / "artifact",
+        )
+
+        assert manifest["frames"] == ["render/0001.png", "render/0002.png"]
+        assert manifest["markers"] == [0, 1]
+
+    def test_write_manifest_from_frames_creates_manifest(self, tmp_path):
+        manifest_path, manifest = write_manifest_from_frames(
+            frame_paths=[
+                str(tmp_path / "artifact" / "render" / "0001.png"),
+                str(tmp_path / "artifact" / "render" / "0002.png"),
+            ],
+            fps=24,
+            marker_frames=[10, 11],
+            frame_start=10,
+            export_root=tmp_path / "artifact",
+        )
+
+        assert manifest_path == tmp_path / "artifact" / DEFAULT_MANIFEST_FILENAME
+        assert manifest_path.exists()
+        assert manifest["frames"] == ["render/0001.png", "render/0002.png"]

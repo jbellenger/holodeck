@@ -6,7 +6,8 @@ import http.server
 import shutil
 import socketserver
 from pathlib import Path
-from typing import Optional
+
+from .runtime import get_package_path
 
 # Default player directory name (minimal footprint)
 DEFAULT_PLAYER_DIR = ""
@@ -31,7 +32,7 @@ class QuietServer(socketserver.TCPServer):
 
 def get_resources_dir() -> Path:
     """Get the path to the bundled resources directory."""
-    return Path(__file__).parent.parent / "resources"
+    return get_package_path("resources")
 
 
 def deploy_player(target_dir: Path, player_dirname: str = DEFAULT_PLAYER_DIR) -> Path:
@@ -39,7 +40,7 @@ def deploy_player(target_dir: Path, player_dirname: str = DEFAULT_PLAYER_DIR) ->
     Deploy the player files to the target directory.
 
     Args:
-        target_dir: Directory to deploy into (typically the blend file's directory)
+        target_dir: Directory to deploy into
         player_dirname: Name for the player subdirectory
 
     Returns:
@@ -52,7 +53,7 @@ def deploy_player(target_dir: Path, player_dirname: str = DEFAULT_PLAYER_DIR) ->
     if not resources.exists() or not (resources / "index.html").exists():
         raise FileNotFoundError(
             f"Bundled player resources not found at {resources}. "
-            f"The addon may be incorrectly installed."
+            f"The Holodeck package may be incorrectly installed."
         )
 
     player_dir = target_dir / player_dirname if player_dirname else target_dir
@@ -83,26 +84,6 @@ def get_player_url(port: int, player_path: str = DEFAULT_PLAYER_DIR) -> str:
     if not normalized_path:
         return f"http://localhost:{port}/"
     return f"http://localhost:{port}/{normalized_path}/"
-
-
-def validate_server_directory(blend_filepath: str) -> Optional[Path]:
-    """
-    Validate and return the directory to serve from.
-
-    Args:
-        blend_filepath: Path to the .blend file
-
-    Returns:
-        Path to serve from, or None if invalid
-    """
-    if not blend_filepath:
-        return None
-
-    blend_path = Path(blend_filepath)
-    if not blend_path.exists():
-        return None
-
-    return blend_path.parent
 
 
 def check_player_exists(server_dir: Path, player_path: str = DEFAULT_PLAYER_DIR) -> bool:

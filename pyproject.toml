@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "holodeck"
+version = "1.0.0"
+description = "CLI tool for rendering Blender presentations into static Holodeck bundles."
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.11"]
+
+[project.scripts]
+holodeck = "holodeck.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["holodeck*"]
+
+[tool.setuptools.package-data]
+holodeck = ["resources/*", "blender_scripts/*.py"]

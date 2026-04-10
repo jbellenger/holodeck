@@ -8,13 +8,9 @@ from pathlib import Path
 
 import pytest
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "holodeck"))
-
-from core.server import (
+from holodeck.core.server import (
     DEFAULT_PLAYER_DIR,
     get_player_url,
-    validate_server_directory,
     check_player_exists,
     create_server,
     deploy_player,
@@ -36,25 +32,6 @@ class TestGetPlayerUrl:
     def test_custom_player_path(self):
         url = get_player_url(8000, "my-player")
         assert url == "http://localhost:8000/my-player/"
-
-
-class TestValidateServerDirectory:
-    """Tests for server directory validation."""
-
-    def test_empty_filepath_returns_none(self):
-        assert validate_server_directory("") is None
-        assert validate_server_directory(None) is None
-
-    def test_nonexistent_file_returns_none(self):
-        assert validate_server_directory("/nonexistent/path/file.blend") is None
-
-    def test_valid_filepath_returns_parent_dir(self, tmp_path):
-        # Create a fake blend file
-        blend_file = tmp_path / "test.blend"
-        blend_file.touch()
-
-        result = validate_server_directory(str(blend_file))
-        assert result == tmp_path
 
 
 class TestCheckPlayerExists:
@@ -220,7 +197,7 @@ class TestDeployPlayer:
     def test_deploy_raises_if_resources_missing(self, tmp_path, monkeypatch):
         # Mock get_resources_dir to return a non-existent path
         monkeypatch.setattr(
-            "core.server.get_resources_dir",
+            "holodeck.core.server.get_resources_dir",
             lambda: tmp_path / "nonexistent"
         )
         with pytest.raises(FileNotFoundError) as exc_info:
