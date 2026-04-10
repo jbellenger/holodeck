@@ -27,3 +27,18 @@ def test_player_assets_use_relative_paths_for_static_hosts():
     assert 'href="styles.css"' in index_html
     assert 'src="player.js"' in index_html
     assert 'fetch("./manifest.json")' in player_js
+
+
+def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
+    player_js = (ROOT_DIR / "holodeck" / "resources" / "player.js").read_text(encoding="utf-8")
+    styles_css = (ROOT_DIR / "holodeck" / "resources" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'const loadingIndicatorDelayMillis = 32;' in player_js
+    assert 'case "ArrowDown":' in player_js
+    assert 'case "Enter":' in player_js
+    assert 'case "KeyF":' in player_js
+    assert "requestFullscreen" in player_js
+    assert 'container.addEventListener("touchend"' in player_js
+    assert "changedTouches[0].clientX" in player_js
+    assert "jump(-1);" in player_js
+    assert "touch-action: manipulation;" in styles_css

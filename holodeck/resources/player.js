@@ -1,4 +1,5 @@
 const preloadConcurrency = 6;
+const loadingIndicatorDelayMillis = 32;
 
 class CancelledActionError extends Error {
   constructor() {
@@ -13,6 +14,7 @@ class CancelledActionError extends Error {
   const img = document.getElementById("image");
   const status = document.getElementById("status");
   const message = document.getElementById("message");
+  const container = document.getElementById("container");
   const loadingBar = document.getElementById("loading-bar");
   const loadingProgress = document.getElementById("loading-progress");
 
@@ -20,6 +22,8 @@ class CancelledActionError extends Error {
   let currentFrame = 0;
   let playing = false;
   let ready = false;
+  let loadingIndicatorTimeout = null;
+  let pendingLoadingState = null;
   const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
   const warmedFrames = new Array(frameUrls.length).fill(false);
   const frameWarmPromises = new Array(frameUrls.length).fill(null);
@@ -40,7 +44,7 @@ class CancelledActionError extends Error {
     message.textContent = "";
   }
 
-  function showLoadingProgress(completed = null, total = null) {
+  function renderLoadingProgress(completed = null, total = null) {
     announceStatus(
       completed !== null && total !== null
         ? `Loading frames ${completed}/${total}`
@@ -61,7 +65,36 @@ class CancelledActionError extends Error {
     loadingProgress.style.transform = "translateX(-100%)";
   }
 
+  function showLoadingProgress(completed = null, total = null) {
+    pendingLoadingState = { completed, total };
+
+    if (loadingBar.style.display === "block") {
+      renderLoadingProgress(completed, total);
+      return;
+    }
+
+    if (loadingIndicatorTimeout !== null) {
+      return;
+    }
+
+    loadingIndicatorTimeout = setTimeout(() => {
+      loadingIndicatorTimeout = null;
+      if (!pendingLoadingState) {
+        return;
+      }
+
+      renderLoadingProgress(pendingLoadingState.completed, pendingLoadingState.total);
+    }, loadingIndicatorDelayMillis);
+  }
+
   function hideLoadingProgress() {
+    pendingLoadingState = null;
+
+    if (loadingIndicatorTimeout !== null) {
+      clearTimeout(loadingIndicatorTimeout);
+      loadingIndicatorTimeout = null;
+    }
+
     loadingBar.style.display = "none";
     loadingBar.classList.remove("is-indeterminate");
     loadingProgress.style.width = "15%";
@@ -247,6 +280,52 @@ class CancelledActionError extends Error {
     }
   }
 
+  function togglePlayback() {
+    if (playing) {
+      playing = false;
+      startAction();
+      return;
+    }
+
+    playing = true;
+    runAsync(() => play(currentFrame, startAction()));
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch((error) => {
+        console.error(error);
+      });
+      return;
+    }
+
+    if (!container.requestFullscreen) {
+      return;
+    }
+
+    container.requestFullscreen().catch((error) => {
+      console.error(error);
+    });
+  }
+
+  function handleTouchAction(clientX) {
+    if (!ready) {
+      return;
+    }
+
+    const bounds = container.getBoundingClientRect();
+    const touchX = clientX - bounds.left;
+
+    if (touchX < bounds.width / 2) {
+      playing = false;
+      startAction();
+      jump(-1);
+      return;
+    }
+
+    togglePlayback();
+  }
+
   async function play(startFrame, actionId) {
     const clampedFrame = displayFrame(startFrame);
     if (clampedFrame === null) {
@@ -321,22 +400,35 @@ class CancelledActionError extends Error {
         startAction();
         jump(1);
         break;
+      case "ArrowDown":
+      case "Enter":
       case "Space":
+        event.preventDefault();
         if (event.repeat) {
           break;
         }
 
-        if (playing) {
-          playing = false;
-          startAction();
+        togglePlayback();
+        break;
+      case "KeyF":
+        event.preventDefault();
+        if (event.repeat) {
           break;
         }
 
-        playing = true;
-        runAsync(() => play(currentFrame, startAction()));
+        toggleFullscreen();
         break;
     }
   });
+
+  container.addEventListener("touchend", (event) => {
+    if (event.changedTouches.length !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+    handleTouchAction(event.changedTouches[0].clientX);
+  }, { passive: false });
 
   try {
     if (frames.length === 0) {
