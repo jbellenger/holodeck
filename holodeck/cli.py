@@ -38,19 +38,19 @@ def build_parser() -> argparse.ArgumentParser:
     render_parser.set_defaults(func=render_frames_command)
     command_parsers.append(render_parser)
 
-    manifest_parser = subparsers.add_parser(
-        "gen-manifest",
-        help="Generate manifest.json from a .blend file and rendered output.",
-        description="Generate manifest.json from a .blend file and rendered output.",
+    refresh_parser = subparsers.add_parser(
+        "refresh",
+        help="Refresh manifest.json and player assets from a .blend file and rendered output.",
+        description="Refresh manifest.json and player assets from a .blend file and rendered output.",
     )
-    _add_blend_arguments(manifest_parser)
-    manifest_parser.set_defaults(func=gen_manifest_command)
-    command_parsers.append(manifest_parser)
+    _add_blend_arguments(refresh_parser)
+    refresh_parser.set_defaults(func=refresh_command)
+    command_parsers.append(refresh_parser)
 
     build_parser = subparsers.add_parser(
         "build",
-        help="Render frames and generate manifest.json in a single step.",
-        description="Render frames and generate manifest.json in a single step.",
+        help="Render frames and refresh the output bundle in a single step.",
+        description="Render frames and refresh the output bundle in a single step.",
     )
     _add_blend_arguments(build_parser)
     build_parser.set_defaults(func=build_command)
@@ -204,7 +204,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def gen_manifest_command(args: argparse.Namespace) -> int:
+def refresh_command(args: argparse.Namespace) -> int:
     blend_file = _resolve_blend_file(args.blend_file)
     output_dir = _resolve_output_dir(args.output_dir)
 
@@ -238,7 +238,7 @@ def gen_manifest_command(args: argparse.Namespace) -> int:
 
 def build_command(args: argparse.Namespace) -> int:
     render_frames_command(args)
-    gen_manifest_command(args)
+    refresh_command(args)
     return 0
 
 

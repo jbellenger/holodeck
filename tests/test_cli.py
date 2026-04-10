@@ -17,7 +17,7 @@ class TestCliHelp:
         assert exit_code == 0
         assert "Full subcommand reference:" in captured.out
         assert "usage: holodeck render-frames" in captured.out
-        assert "usage: holodeck gen-manifest" in captured.out
+        assert "usage: holodeck refresh" in captured.out
         assert "usage: holodeck build" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
@@ -36,7 +36,7 @@ class TestCliHelp:
         assert exc_info.value.code == 0
         assert "Full subcommand reference:" in captured.out
         assert "usage: holodeck render-frames" in captured.out
-        assert "usage: holodeck gen-manifest" in captured.out
+        assert "usage: holodeck refresh" in captured.out
         assert "usage: holodeck build" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
@@ -69,7 +69,7 @@ class TestRenderFramesCommand:
         assert calls[1][1]["blend_file"] == blend_file.resolve()
 
 
-class TestGenManifestCommand:
+class TestRefreshCommand:
     def test_writes_manifest_from_expected_frames(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
@@ -94,7 +94,7 @@ class TestGenManifestCommand:
             ),
         )
 
-        exit_code = main(["gen-manifest", str(blend_file), str(output_dir)])
+        exit_code = main(["refresh", str(blend_file), str(output_dir)])
 
         assert exit_code == 0
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
@@ -122,7 +122,7 @@ class TestGenManifestCommand:
             ),
         )
 
-        exit_code = main(["gen-manifest", str(blend_file), str(output_dir)])
+        exit_code = main(["refresh", str(blend_file), str(output_dir)])
 
         captured = capsys.readouterr()
         assert exit_code == 1
@@ -130,7 +130,7 @@ class TestGenManifestCommand:
 
 
 class TestBuildCommand:
-    def test_runs_render_then_manifest(self, monkeypatch, tmp_path):
+    def test_runs_render_then_refresh(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         output_dir = tmp_path / "dist"
         calls = []
@@ -140,7 +140,7 @@ class TestBuildCommand:
             lambda args: calls.append(("render", args.blend_file, args.output_dir)) or 0,
         )
         monkeypatch.setattr(
-            "holodeck.cli.gen_manifest_command",
+            "holodeck.cli.refresh_command",
             lambda args: calls.append(("manifest", args.blend_file, args.output_dir)) or 0,
         )
 
