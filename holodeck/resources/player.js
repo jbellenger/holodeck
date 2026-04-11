@@ -2,6 +2,8 @@ const preloadConcurrency = 6;
 const loadingIndicatorDelayMillis = 32;
 const optimisticPreloadSegmentCount = 2;
 const swipeThresholdPixels = 48;
+const decodedFrameBufferAhead = 6;
+const decodedFrameBufferBehind = 1;
 
 class CancelledActionError extends Error {
   constructor() {
@@ -13,23 +15,34 @@ class CancelledActionError extends Error {
 (async function () {
   const { markers, frames, fps, token } = await fetch("./manifest.json").then((resp) => resp.json());
   const frameMillis = 1000 / fps;
-  const img = document.getElementById("image");
+  const canvas = document.getElementById("canvas");
+  const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
   const status = document.getElementById("status");
   const message = document.getElementById("message");
   const container = document.getElementById("container");
   const loadingBar = document.getElementById("loading-bar");
   const loadingProgress = document.getElementById("loading-progress");
+  const markerSet = new Set(markers);
+
+  if (!context) {
+    throw new Error("Unable to acquire 2D canvas context.");
+  }
 
   let lastActionId = 0;
   let currentFrame = 0;
+  let currentFrameWidth = 0;
+  let currentFrameHeight = 0;
   let playing = false;
   let ready = false;
   let loadingIndicatorTimeout = null;
   let pendingLoadingState = null;
   let touchStartPoint = null;
+  let resizeQueued = false;
   const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
   const warmedFrames = new Array(frameUrls.length).fill(false);
   const frameWarmPromises = new Array(frameUrls.length).fill(null);
+  const decodedFrames = new Map();
+  const decodedFramePromises = new Map();
 
   function announceStatus(messageText) {
     status.textContent = messageText;
@@ -104,8 +117,33 @@ class CancelledActionError extends Error {
     loadingProgress.style.transform = "translateX(-100%)";
   }
 
+  function resizeCanvas() {
+    const pixelRatio = window.devicePixelRatio || 1;
+    const width = Math.max(1, Math.round(container.clientWidth * pixelRatio));
+    const height = Math.max(1, Math.round(container.clientHeight * pixelRatio));
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+  }
+
+  function drawFrame(source, width, height) {
+    resizeCanvas();
+    context.fillStyle = "#000";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const scale = Math.min(canvas.width / width, canvas.height / height);
+    const drawWidth = width * scale;
+    const drawHeight = height * scale;
+    const dx = (canvas.width - drawWidth) / 2;
+    const dy = (canvas.height - drawHeight) / 2;
+
+    context.drawImage(source, dx, dy, drawWidth, drawHeight);
+  }
+
   function showPlayer() {
-    img.style.display = "block";
+    canvas.style.display = "block";
     hideMessage();
     hideLoadingProgress();
   }
@@ -249,6 +287,152 @@ class CancelledActionError extends Error {
     return { start, end };
   }
 
+  function releaseDecodedFrame(frameIndex) {
+    const entry = decodedFrames.get(frameIndex);
+    if (!entry) {
+      return;
+    }
+
+    entry.release();
+    decodedFrames.delete(frameIndex);
+  }
+
+  function pruneDecodedFrames(referenceFrame) {
+    const keepStart = Math.max(0, referenceFrame - decodedFrameBufferBehind);
+    const keepEnd = Math.min(frameUrls.length - 1, referenceFrame + decodedFrameBufferAhead);
+
+    for (const frameIndex of decodedFrames.keys()) {
+      if (frameIndex < keepStart || frameIndex > keepEnd) {
+        releaseDecodedFrame(frameIndex);
+      }
+    }
+  }
+
+  async function decodeBlob(blob) {
+    if (typeof createImageBitmap === "function") {
+      const bitmap = await createImageBitmap(blob);
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        release() {
+          bitmap.close();
+        },
+      };
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = objectUrl;
+
+    try {
+      await image.decode();
+      return {
+        source: image,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        release() {
+          URL.revokeObjectURL(objectUrl);
+        },
+      };
+    } catch (error) {
+      URL.revokeObjectURL(objectUrl);
+      throw error;
+    }
+  }
+
+  async function getDecodedFrame(frameIndex, { actionId = null } = {}) {
+    assertActionIfProvided(actionId);
+
+    const cachedFrame = decodedFrames.get(frameIndex);
+    if (cachedFrame) {
+      return cachedFrame;
+    }
+
+    if (decodedFramePromises.has(frameIndex)) {
+      return decodedFramePromises.get(frameIndex);
+    }
+
+    const decodePromise = (async () => {
+      await warmFrame(frameIndex);
+      assertActionIfProvided(actionId);
+
+      const response = await fetch(frameUrls[frameIndex], { cache: "force-cache" });
+      if (!response.ok) {
+        throw new Error(`Failed to decode frame ${frameUrls[frameIndex]}: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      assertActionIfProvided(actionId);
+      const decodedFrame = await decodeBlob(blob);
+
+      try {
+        assertActionIfProvided(actionId);
+      } catch (error) {
+        decodedFrame.release();
+        throw error;
+      }
+
+      decodedFrames.set(frameIndex, decodedFrame);
+      return decodedFrame;
+    })();
+
+    decodedFramePromises.set(
+      frameIndex,
+      decodePromise.finally(() => {
+        decodedFramePromises.delete(frameIndex);
+      })
+    );
+
+    return decodedFramePromises.get(frameIndex);
+  }
+
+  async function fillDecodedBuffer(frame, { actionId = null } = {}) {
+    assertActionIfProvided(actionId);
+
+    const segmentEnd = getSegmentEnd(frame);
+    const bufferEnd = Math.min(segmentEnd, frame + decodedFrameBufferAhead);
+
+    for (let frameIndex = frame; frameIndex <= bufferEnd; frameIndex += 1) {
+      await getDecodedFrame(frameIndex, { actionId });
+      assertActionIfProvided(actionId);
+      pruneDecodedFrames(frameIndex);
+    }
+  }
+
+  function getBestDecodedFrame(startFrame, targetFrame) {
+    for (let frameIndex = targetFrame; frameIndex >= startFrame; frameIndex -= 1) {
+      if (decodedFrames.has(frameIndex)) {
+        return frameIndex;
+      }
+    }
+
+    return null;
+  }
+
+  async function renderFrame(frame, { actionId = null } = {}) {
+    if (frameUrls.length === 0) {
+      return null;
+    }
+
+    const clampedFrame = Math.max(0, Math.min(frame, frameUrls.length - 1));
+    const decodedFrame = await getDecodedFrame(clampedFrame, { actionId });
+    assertActionIfProvided(actionId);
+
+    drawFrame(decodedFrame.source, decodedFrame.width, decodedFrame.height);
+    currentFrame = clampedFrame;
+    currentFrameWidth = decodedFrame.width;
+    currentFrameHeight = decodedFrame.height;
+    pruneDecodedFrames(clampedFrame);
+
+    if (ready) {
+      hideLoadingProgress();
+    }
+
+    return clampedFrame;
+  }
+
   async function warmOptimisticSegments(frame, { excludeFrame = null } = {}) {
     const segmentStarts = getPreloadSegmentStarts(frame);
 
@@ -260,41 +444,41 @@ class CancelledActionError extends Error {
   }
 
   function scheduleOptimisticPreload(frame, { excludeFrame = null } = {}) {
-    runAsync(() => warmOptimisticSegments(frame, { excludeFrame }));
+    runBackground(() => warmOptimisticSegments(frame, { excludeFrame }));
   }
 
-  function displayFrame(frame) {
-    if (frameUrls.length === 0) {
-      return null;
-    }
-
-    const clampedFrame = Math.max(0, Math.min(frame, frameUrls.length - 1));
-    img.src = frameUrls[clampedFrame];
-    currentFrame = clampedFrame;
-
-    if (ready) {
-      hideLoadingProgress();
-    }
-
-    return clampedFrame;
+  function scheduleDecodedBuffer(frame, { actionId = null } = {}) {
+    runBackground(() => fillDecodedBuffer(frame, { actionId }));
   }
 
-  async function waitForDisplayedFrame(frame) {
-    const clampedFrame = displayFrame(frame);
-    if (clampedFrame === null) {
+  function queueCurrentFrameRedraw() {
+    if (!ready || resizeQueued) {
       return;
     }
 
-    await img.decode();
+    resizeQueued = true;
+    requestAnimationFrame(() => {
+      resizeQueued = false;
+      const decodedFrame = decodedFrames.get(currentFrame);
+      if (!decodedFrame) {
+        return;
+      }
+
+      drawFrame(decodedFrame.source, decodedFrame.width, decodedFrame.height);
+    });
   }
 
   function seek(frame) {
-    const clampedFrame = displayFrame(frame);
-    if (clampedFrame === null) {
-      return;
-    }
+    const actionId = lastActionId;
+    runAsync(async () => {
+      const clampedFrame = await renderFrame(frame, { actionId });
+      if (clampedFrame === null) {
+        return;
+      }
 
-    scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
+      scheduleDecodedBuffer(clampedFrame, { actionId });
+      scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
+    });
   }
 
   function jump(direction) {
@@ -351,7 +535,7 @@ class CancelledActionError extends Error {
   }
 
   function isWideImage() {
-    return img.naturalWidth > img.naturalHeight;
+    return currentFrameWidth > currentFrameHeight;
   }
 
   async function enableFullscreen({ preferLandscape = false } = {}) {
@@ -431,64 +615,86 @@ class CancelledActionError extends Error {
   }
 
   async function play(startFrame, actionId) {
-    const clampedFrame = displayFrame(startFrame);
+    const clampedFrame = await renderFrame(startFrame, { actionId });
     if (clampedFrame === null) {
       return;
     }
 
-    if (!playing) return;
+    if (!playing) {
+      return;
+    }
+
     assertActionActive(actionId);
     await warmSegment(clampedFrame, {
       actionId,
       showProgress: true,
       excludeFrame: clampedFrame,
     });
+    await fillDecodedBuffer(clampedFrame, { actionId });
     hideLoadingProgress();
     scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
 
-    const segmentEnd = getSegmentEnd(currentFrame);
+    const segmentEnd = getSegmentEnd(clampedFrame);
+    const startTimestamp = performance.now();
 
-    function loop(frame) {
-      setTimeout(() => {
-        if (!playing || !isActionActive(actionId)) {
-          return;
+    function loop(timestamp) {
+      if (!playing || !isActionActive(actionId)) {
+        return;
+      }
+
+      const elapsedFrames = Math.floor((timestamp - startTimestamp) / frameMillis);
+      const targetFrame = Math.min(clampedFrame + elapsedFrames, segmentEnd, frameUrls.length - 1);
+
+      if (targetFrame > currentFrame) {
+        const decodedFrameIndex = getBestDecodedFrame(currentFrame + 1, targetFrame);
+        if (decodedFrameIndex !== null) {
+          const decodedFrame = decodedFrames.get(decodedFrameIndex);
+          drawFrame(decodedFrame.source, decodedFrame.width, decodedFrame.height);
+          currentFrame = decodedFrameIndex;
+          currentFrameWidth = decodedFrame.width;
+          currentFrameHeight = decodedFrame.height;
+          pruneDecodedFrames(decodedFrameIndex);
+          scheduleDecodedBuffer(decodedFrameIndex, { actionId });
         }
+      }
 
-        const nextFrame = frame + 1;
-        if (nextFrame > segmentEnd || nextFrame >= frameUrls.length) {
-          playing = false;
-          return;
-        }
+      const isLast = currentFrame === frameUrls.length - 1;
+      const isMarker = currentFrame !== clampedFrame && markerSet.has(currentFrame);
+      if (currentFrame >= segmentEnd || isLast || isMarker) {
+        playing = false;
+        scheduleOptimisticPreload(currentFrame, { excludeFrame: currentFrame });
+        return;
+      }
 
-        img.src = frameUrls[nextFrame];
-        currentFrame = nextFrame;
-
-        const isLast = nextFrame === frameUrls.length - 1;
-        const isMarker = markers.includes(nextFrame);
-        if (isLast || isMarker) {
-          playing = false;
-          scheduleOptimisticPreload(nextFrame, { excludeFrame: nextFrame });
-          return;
-        }
-
-        loop(nextFrame);
-      }, frameMillis);
+      requestAnimationFrame(loop);
     }
 
-    loop(currentFrame);
+    requestAnimationFrame(loop);
+  }
+
+  function handleAsyncError(error, { hideProgressOnCancel = false } = {}) {
+    if (error instanceof CancelledActionError) {
+      if (hideProgressOnCancel) {
+        hideLoadingProgress();
+      }
+      return;
+    }
+
+    playing = false;
+    hideLoadingProgress();
+    showMessage("Failed to load frames");
+    console.error(error);
   }
 
   function runAsync(action) {
     action().catch((error) => {
-      if (error instanceof CancelledActionError) {
-        hideLoadingProgress();
-        return;
-      }
+      handleAsyncError(error, { hideProgressOnCancel: true });
+    });
+  }
 
-      playing = false;
-      hideLoadingProgress();
-      showMessage("Failed to load frames");
-      console.error(error);
+  function runBackground(action) {
+    action().catch((error) => {
+      handleAsyncError(error);
     });
   }
 
@@ -527,6 +733,9 @@ class CancelledActionError extends Error {
     }
   });
 
+  addEventListener("resize", queueCurrentFrameRedraw);
+  document.addEventListener("fullscreenchange", queueCurrentFrameRedraw);
+
   container.addEventListener("touchstart", (event) => {
     if (event.touches.length !== 1) {
       touchStartPoint = null;
@@ -564,9 +773,10 @@ class CancelledActionError extends Error {
     showLoadingProgress();
     await warmFrame(0);
     assertActionActive(initialActionId);
-    await waitForDisplayedFrame(0);
+    await renderFrame(0, { actionId: initialActionId });
     ready = true;
     showPlayer();
+    scheduleDecodedBuffer(0, { actionId: initialActionId });
     scheduleOptimisticPreload(0, { excludeFrame: 0 });
   } catch (error) {
     hideLoadingProgress();

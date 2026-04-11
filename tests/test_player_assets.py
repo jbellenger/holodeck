@@ -31,14 +31,21 @@ def test_player_assets_use_relative_paths_for_static_hosts():
 
 def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     player_js = (ROOT_DIR / "holodeck" / "resources" / "player.js").read_text(encoding="utf-8")
+    index_html = (ROOT_DIR / "holodeck" / "resources" / "index.html").read_text(encoding="utf-8")
     styles_css = (ROOT_DIR / "holodeck" / "resources" / "styles.css").read_text(encoding="utf-8")
 
+    assert '<canvas id="canvas"></canvas>' in index_html
     assert 'const loadingIndicatorDelayMillis = 32;' in player_js
     assert 'const optimisticPreloadSegmentCount = 2;' in player_js
     assert 'const swipeThresholdPixels = 48;' in player_js
+    assert 'const decodedFrameBufferAhead = 6;' in player_js
+    assert 'const decodedFrameBufferBehind = 1;' in player_js
     assert 'case "ArrowDown":' in player_js
     assert 'case "Enter":' in player_js
     assert 'case "KeyF":' in player_js
+    assert 'requestAnimationFrame(loop);' in player_js
+    assert "createImageBitmap" in player_js
+    assert 'document.getElementById("canvas")' in player_js
     assert "requestFullscreen" in player_js
     assert 'screen.orientation.lock("landscape")' in player_js
     assert "screen.orientation.unlock();" in player_js
@@ -50,4 +57,5 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert "handleTouchGesture(event.changedTouches[0])" in player_js
     assert "jump(-1);" in player_js
     assert "scheduleOptimisticPreload" in player_js
+    assert "scheduleDecodedBuffer" in player_js
     assert "touch-action: manipulation;" in styles_css
