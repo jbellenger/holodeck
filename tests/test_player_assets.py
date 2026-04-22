@@ -40,6 +40,7 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert 'const swipeThresholdPixels = 48;' in player_js
     assert 'const decodedFrameBufferAhead = 6;' in player_js
     assert 'const decodedFrameBufferBehind = 1;' in player_js
+    assert 'const decodedFrameConcurrency = 3;' in player_js
     assert 'case "ArrowDown":' in player_js
     assert 'case "Enter":' in player_js
     assert 'case "KeyF":' in player_js
@@ -58,4 +59,6 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert "jump(-1);" in player_js
     assert "scheduleOptimisticPreload" in player_js
     assert "scheduleDecodedBuffer" in player_js
+    assert 'const warmedBlob = await warmFrame(frameIndex);' in player_js
+    assert 'const workerCount = Math.min(decodedFrameConcurrency, pendingFrames.length);' in player_js
     assert "touch-action: manipulation;" in styles_css

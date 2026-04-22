@@ -4,6 +4,7 @@ const optimisticPreloadSegmentCount = 2;
 const swipeThresholdPixels = 48;
 const decodedFrameBufferAhead = 6;
 const decodedFrameBufferBehind = 1;
+const decodedFrameConcurrency = 3;
 
 class CancelledActionError extends Error {
   constructor() {
@@ -215,12 +216,12 @@ class CancelledActionError extends Error {
   }
 
   async function warmFrame(frameIndex) {
-    if (warmedFrames[frameIndex]) {
-      return;
-    }
-
     if (frameWarmPromises[frameIndex]) {
       return frameWarmPromises[frameIndex];
+    }
+
+    if (warmedFrames[frameIndex]) {
+      return null;
     }
 
     const warmPromise = (async () => {
@@ -229,8 +230,9 @@ class CancelledActionError extends Error {
         throw new Error(`Failed to preload frame ${frameUrls[frameIndex]}: ${response.status}`);
       }
 
-      await response.blob();
+      const blob = await response.blob();
       warmedFrames[frameIndex] = true;
+      return blob;
     })();
 
     frameWarmPromises[frameIndex] = warmPromise.finally(() => {
@@ -355,15 +357,18 @@ class CancelledActionError extends Error {
     }
 
     const decodePromise = (async () => {
-      await warmFrame(frameIndex);
+      const warmedBlob = await warmFrame(frameIndex);
       assertActionIfProvided(actionId);
 
-      const response = await fetch(frameUrls[frameIndex], { cache: "force-cache" });
-      if (!response.ok) {
-        throw new Error(`Failed to decode frame ${frameUrls[frameIndex]}: ${response.status}`);
-      }
+      let blob = warmedBlob;
+      if (!blob) {
+        const response = await fetch(frameUrls[frameIndex], { cache: "force-cache" });
+        if (!response.ok) {
+          throw new Error(`Failed to decode frame ${frameUrls[frameIndex]}: ${response.status}`);
+        }
 
-      const blob = await response.blob();
+        blob = await response.blob();
+      }
       assertActionIfProvided(actionId);
       const decodedFrame = await decodeBlob(blob);
 
@@ -393,12 +398,36 @@ class CancelledActionError extends Error {
 
     const segmentEnd = getSegmentEnd(frame);
     const bufferEnd = Math.min(segmentEnd, frame + decodedFrameBufferAhead);
+    const pendingFrames = [];
 
     for (let frameIndex = frame; frameIndex <= bufferEnd; frameIndex += 1) {
-      await getDecodedFrame(frameIndex, { actionId });
-      assertActionIfProvided(actionId);
-      pruneDecodedFrames(frameIndex);
+      if (!decodedFrames.has(frameIndex)) {
+        pendingFrames.push(frameIndex);
+      }
     }
+
+    if (pendingFrames.length === 0) {
+      pruneDecodedFrames(Math.max(frame, currentFrame));
+      return;
+    }
+
+    let nextPendingIndex = 0;
+
+    async function worker() {
+      while (nextPendingIndex < pendingFrames.length) {
+        assertActionIfProvided(actionId);
+        const pendingIndex = nextPendingIndex;
+        nextPendingIndex += 1;
+        const frameIndex = pendingFrames[pendingIndex];
+        await getDecodedFrame(frameIndex, { actionId });
+        assertActionIfProvided(actionId);
+        pruneDecodedFrames(Math.max(frame, currentFrame));
+      }
+    }
+
+    const workerCount = Math.min(decodedFrameConcurrency, pendingFrames.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    assertActionIfProvided(actionId);
   }
 
   function getBestDecodedFrame(startFrame, targetFrame) {
@@ -625,11 +654,8 @@ class CancelledActionError extends Error {
     }
 
     assertActionActive(actionId);
-    await warmSegment(clampedFrame, {
-      actionId,
-      showProgress: true,
-      excludeFrame: clampedFrame,
-    });
+    // Start once a short decoded runway is ready; warm the rest in the background.
+    showLoadingProgress();
     await fillDecodedBuffer(clampedFrame, { actionId });
     hideLoadingProgress();
     scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
@@ -771,8 +797,6 @@ class CancelledActionError extends Error {
 
     const initialActionId = startAction();
     showLoadingProgress();
-    await warmFrame(0);
-    assertActionActive(initialActionId);
     await renderFrame(0, { actionId: initialActionId });
     ready = true;
     showPlayer();
