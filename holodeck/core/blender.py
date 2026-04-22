@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import tempfile
@@ -64,27 +63,21 @@ def run_blender_script(
         raise FileNotFoundError(f"Blender helper script not found: {script_path}")
 
     blender_path = resolve_blender_executable(blender_executable)
+    package_parent = str(get_package_root().parent)
+    bootstrap_expr = f"import sys; sys.path.insert(0, {json.dumps(package_parent)})"
     command = [
         blender_path,
         "-b",
-        "--python-use-system-env",
         str(blend_file),
+        "--python-expr",
+        bootstrap_expr,
         "--python",
         str(script_path),
     ]
     if script_args:
         command.extend(["--", *script_args])
 
-    env = os.environ.copy()
-    package_parent = str(get_package_root().parent)
-    existing_pythonpath = env.get("PYTHONPATH")
-    env["PYTHONPATH"] = (
-        os.pathsep.join([package_parent, existing_pythonpath])
-        if existing_pythonpath
-        else package_parent
-    )
-
-    subprocess.run(command, check=True, env=env)
+    subprocess.run(command, check=True)
 
 
 def render_blend(

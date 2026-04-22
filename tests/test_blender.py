@@ -1,7 +1,6 @@
 """Tests for Blender subprocess helpers."""
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -41,10 +40,9 @@ class TestRunBlenderScript:
             lambda _: "/usr/bin/blender",
         )
 
-        def fake_run(command, check, env):
+        def fake_run(command, check):
             captured["command"] = command
             captured["check"] = check
-            captured["env"] = env
 
         monkeypatch.setattr("holodeck.core.blender.subprocess.run", fake_run)
 
@@ -55,18 +53,21 @@ class TestRunBlenderScript:
         )
 
         assert captured["check"] is True
+        expected_bootstrap_expr = (
+            f'import sys; sys.path.insert(0, {json.dumps(str(tmp_path / "package-root"))})'
+        )
         assert captured["command"] == [
             "/usr/bin/blender",
             "-b",
-            "--python-use-system-env",
             str(blend_file),
+            "--python-expr",
+            expected_bootstrap_expr,
             "--python",
             str(helper_script),
             "--",
             "--output",
             str(tmp_path / "out"),
         ]
-        assert captured["env"]["PYTHONPATH"].split(os.pathsep)[0] == str(tmp_path / "package-root")
 
 
 class TestRenderBlend:
