@@ -6,6 +6,7 @@ from pathlib import Path
 
 import bpy
 
+from holodeck.core.frame_spec import parse_frame_spec
 from holodeck.core.render_settings import configure_scene_for_holodeck_render
 
 
@@ -26,6 +27,10 @@ def parse_args(argv):
         default=100,
         help="Resolution percentage override for rendering.",
     )
+    parser.add_argument(
+        "--frames",
+        help="Optional frame spec (e.g. '4', '4-10', '1,2,3') to render only those frames.",
+    )
     return parser.parse_args(argv)
 
 
@@ -44,7 +49,13 @@ def main(argv):
         render_dir,
         resolution_percentage=args.res_pct,
     )
-    bpy.ops.render.render(animation=True, scene=scene.name)
+
+    if args.frames:
+        for frame in parse_frame_spec(args.frames):
+            scene.frame_set(frame)
+            bpy.ops.render.render(write_still=True, scene=scene.name)
+    else:
+        bpy.ops.render.render(animation=True, scene=scene.name)
 
 
 if __name__ == "__main__":

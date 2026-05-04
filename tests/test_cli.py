@@ -83,6 +83,54 @@ class TestRenderFramesCommand:
         assert exc_info.value.code == 2
         assert "must be a positive integer" in captured.err
 
+    def test_passes_frames_option_through_to_render(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
+        monkeypatch.setattr(
+            "holodeck.cli.render_blend",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        exit_code = main(
+            ["render-frames", str(blend_file), str(output_dir), "--frames", "1,4-6"]
+        )
+
+        assert exit_code == 0
+        assert calls[0]["frames"] == "1,4-6"
+
+    def test_defaults_frames_option_to_none(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
+        monkeypatch.setattr(
+            "holodeck.cli.render_blend",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        exit_code = main(["render-frames", str(blend_file), str(output_dir)])
+
+        assert exit_code == 0
+        assert calls[0]["frames"] is None
+
+    def test_rejects_invalid_frames_spec(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["render-frames", str(blend_file), str(output_dir), "--frames", "1-"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "Invalid frame" in captured.err
+
 
 class TestRefreshCommand:
     def test_writes_manifest_from_expected_frames(self, monkeypatch, tmp_path):

@@ -95,6 +95,43 @@ class TestRenderBlend:
             "Deck",
         ]
 
+    def test_forwards_frames_option(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        captured = {}
+
+        def fake_run_blender_script(**kwargs):
+            captured.update(kwargs)
+
+        monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
+
+        render_blend(blend_file=blend_file, output_dir=output_dir, frames="1,4-6")
+
+        assert captured["script_args"] == [
+            "--output",
+            str(output_dir),
+            "--res-pct",
+            "100",
+            "--frames",
+            "1,4-6",
+        ]
+
+    def test_omits_frames_option_when_unset(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        captured = {}
+
+        def fake_run_blender_script(**kwargs):
+            captured.update(kwargs)
+
+        monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
+
+        render_blend(blend_file=blend_file, output_dir=output_dir)
+
+        assert "--frames" not in captured["script_args"]
+
 
 class TestExtractBlendMetadata:
     def test_reads_metadata_json(self, monkeypatch, tmp_path):

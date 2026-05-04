@@ -18,6 +18,7 @@ from .core import (
     render_blend,
     write_manifest_from_frames,
 )
+from .core.frame_spec import parse_frame_spec
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,6 +37,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_blend_arguments(render_parser)
     _add_render_arguments(render_parser)
+    render_parser.add_argument(
+        "--frames",
+        type=_frame_spec,
+        help=(
+            "Render only the given frames (e.g. '4', '4-10', '1,2,3'). "
+            "Does not update manifest.json."
+        ),
+    )
     render_parser.set_defaults(func=render_frames_command)
     command_parsers.append(render_parser)
 
@@ -177,6 +186,14 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _frame_spec(value: str) -> str:
+    try:
+        parse_frame_spec(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
+
+
 def _add_render_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--res-pct",
@@ -217,6 +234,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
         blender_executable=args.blender,
         scene=args.scene,
         res_pct=args.res_pct,
+        frames=getattr(args, "frames", None),
     )
 
     print(f"Rendered frames into {output_dir / 'render'}")
