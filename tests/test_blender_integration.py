@@ -38,6 +38,22 @@ class TestBlenderRenderOverrides:
         assert not list(render_dir.glob("*.exr"))
         assert not (tmp_path / "should-not-use").exists()
 
+    def test_render_blend_with_frames_writes_numbered_output(self, tmp_path):
+        blend_file = copy_blend_fixture("open_exr_output.blend", tmp_path)
+        output_dir = tmp_path / "render-output"
+
+        render_blend(
+            blend_file=blend_file,
+            output_dir=output_dir,
+            blender_executable=BLENDER_PATH,
+            frames="1,3",
+        )
+
+        render_dir = output_dir / "render"
+        rendered_frames = sorted(p.name for p in render_dir.glob("*.avif"))
+
+        assert rendered_frames == ["0001.avif", "0003.avif"]
+
     def test_extract_blend_metadata_uses_holodeck_render_paths(self, tmp_path):
         blend_file = copy_blend_fixture("named_png_output.blend", tmp_path)
         output_dir = tmp_path / "metadata-output"

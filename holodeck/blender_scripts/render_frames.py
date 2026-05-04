@@ -53,6 +53,7 @@ def main(argv):
     if args.frames:
         for frame in parse_frame_spec(args.frames):
             scene.frame_set(frame)
+            scene.render.filepath = f"{render_dir}/{frame:04d}"
             bpy.ops.render.render(write_still=True, scene=scene.name)
     else:
         bpy.ops.render.render(animation=True, scene=scene.name)
