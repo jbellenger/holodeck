@@ -88,13 +88,19 @@ def render_blend(
     scene: str | None = None,
     res_pct: int = 100,
     frames: str | None = None,
+    markers_only: bool = False,
 ) -> None:
     """Render frames for a blend file into the output directory."""
+    if frames and markers_only:
+        raise ValueError("Cannot combine 'frames' and 'markers_only'.")
+
     script_args = ["--output", str(output_dir), "--res-pct", str(res_pct)]
     if scene:
         script_args.extend(["--scene", scene])
     if frames:
         script_args.extend(["--frames", frames])
+    if markers_only:
+        script_args.append("--markers-only")
 
     run_blender_script(
         blend_file=blend_file,

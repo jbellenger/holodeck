@@ -17,6 +17,7 @@ from .core import (
     get_player_url,
     render_blend,
     write_manifest_from_frames,
+    write_markers_only_manifest_from_frames,
 )
 from .core.frame_spec import parse_frame_spec
 
@@ -37,13 +38,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_blend_arguments(render_parser)
     _add_render_arguments(render_parser)
-    render_parser.add_argument(
+    render_frame_selection = render_parser.add_mutually_exclusive_group()
+    render_frame_selection.add_argument(
         "--frames",
         type=_frame_spec,
         help=(
             "Render only the given frames (e.g. '4', '4-10', '1,2,3'). "
             "Does not update manifest.json."
         ),
+    )
+    render_frame_selection.add_argument(
+        "--markers-only",
+        action="store_true",
+        help="Render only frames that have a timeline marker. Does not update manifest.json.",
     )
     render_parser.set_defaults(func=render_frames_command)
     command_parsers.append(render_parser)
@@ -54,6 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
         description="Refresh manifest.json and player assets from a .blend file and rendered output.",
     )
     _add_blend_arguments(refresh_parser)
+    refresh_parser.add_argument(
+        "--markers-only",
+        action="store_true",
+        help="Write a manifest containing only marker frames (skips frames without a marker).",
+    )
     refresh_parser.set_defaults(func=refresh_command)
     command_parsers.append(refresh_parser)
 
@@ -64,6 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_blend_arguments(build_parser)
     _add_render_arguments(build_parser)
+    build_parser.add_argument(
+        "--markers-only",
+        action="store_true",
+        help="Render only marker frames and write a marker-only manifest.",
+    )
     build_parser.set_defaults(func=build_command)
     command_parsers.append(build_parser)
 
@@ -235,6 +252,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
         scene=args.scene,
         res_pct=args.res_pct,
         frames=getattr(args, "frames", None),
+        markers_only=getattr(args, "markers_only", False),
     )
 
     print(f"Rendered frames into {output_dir / 'render'}")
@@ -244,6 +262,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
 def refresh_command(args: argparse.Namespace) -> int:
     blend_file = _resolve_blend_file(args.blend_file)
     output_dir = _resolve_output_dir(args.output_dir)
+    markers_only = getattr(args, "markers_only", False)
 
     deploy_player(output_dir)
     metadata = extract_blend_metadata(
@@ -253,7 +272,11 @@ def refresh_command(args: argparse.Namespace) -> int:
         scene=args.scene,
     )
 
-    missing_frames = [Path(frame_path) for frame_path in metadata.frame_paths if not Path(frame_path).is_file()]
+    frame_paths = (
+        _select_marker_frame_paths(metadata) if markers_only else metadata.frame_paths
+    )
+
+    missing_frames = [Path(frame_path) for frame_path in frame_paths if not Path(frame_path).is_file()]
     if missing_frames:
         missing_preview = ", ".join(path.name for path in missing_frames[:3])
         if len(missing_frames) > 3:
@@ -262,15 +285,32 @@ def refresh_command(args: argparse.Namespace) -> int:
             f"Missing {len(missing_frames)} rendered frame(s) in {output_dir / 'render'}: {missing_preview}"
         )
 
-    manifest_path, manifest = write_manifest_from_frames(
-        frame_paths=metadata.frame_paths,
-        fps=metadata.fps,
-        marker_frames=metadata.marker_frames,
-        frame_start=metadata.frame_start,
-        export_root=output_dir,
-    )
+    if markers_only:
+        manifest_path, manifest = write_markers_only_manifest_from_frames(
+            frame_paths=frame_paths,
+            fps=metadata.fps,
+            export_root=output_dir,
+        )
+    else:
+        manifest_path, manifest = write_manifest_from_frames(
+            frame_paths=frame_paths,
+            fps=metadata.fps,
+            marker_frames=metadata.marker_frames,
+            frame_start=metadata.frame_start,
+            export_root=output_dir,
+        )
     print(f"Wrote {manifest_path} with {len(manifest['frames'])} frames")
     return 0
+
+
+def _select_marker_frame_paths(metadata) -> list[str]:
+    frame_count = len(metadata.frame_paths)
+    paths: list[str] = []
+    for marker in sorted(metadata.marker_frames):
+        index = marker - metadata.frame_start
+        if 0 <= index < frame_count:
+            paths.append(metadata.frame_paths[index])
+    return paths
 
 
 def build_command(args: argparse.Namespace) -> int:

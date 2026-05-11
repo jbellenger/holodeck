@@ -31,6 +31,11 @@ def parse_args(argv):
         "--frames",
         help="Optional frame spec (e.g. '4', '4-10', '1,2,3') to render only those frames.",
     )
+    parser.add_argument(
+        "--markers-only",
+        action="store_true",
+        help="Render only frames that have a timeline marker.",
+    )
     return parser.parse_args(argv)
 
 
@@ -50,13 +55,23 @@ def main(argv):
         resolution_percentage=args.res_pct,
     )
 
+    if args.frames and args.markers_only:
+        raise ValueError("Cannot combine --frames and --markers-only.")
+
     if args.frames:
-        for frame in parse_frame_spec(args.frames):
+        frames_to_render = parse_frame_spec(args.frames)
+    elif args.markers_only:
+        frames_to_render = sorted({marker.frame for marker in scene.timeline_markers})
+    else:
+        frames_to_render = None
+
+    if frames_to_render is None:
+        bpy.ops.render.render(animation=True, scene=scene.name)
+    else:
+        for frame in frames_to_render:
             scene.frame_set(frame)
             scene.render.filepath = f"{render_dir}/{frame:04d}"
             bpy.ops.render.render(write_still=True, scene=scene.name)
-    else:
-        bpy.ops.render.render(animation=True, scene=scene.name)
 
 
 if __name__ == "__main__":

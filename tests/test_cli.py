@@ -118,6 +118,48 @@ class TestRenderFramesCommand:
 
         assert exit_code == 0
         assert calls[0]["frames"] is None
+        assert calls[0]["markers_only"] is False
+
+    def test_passes_markers_only_option_through_to_render(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
+        monkeypatch.setattr(
+            "holodeck.cli.render_blend",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        exit_code = main(
+            ["render-frames", str(blend_file), str(output_dir), "--markers-only"]
+        )
+
+        assert exit_code == 0
+        assert calls[0]["markers_only"] is True
+        assert calls[0]["frames"] is None
+
+    def test_rejects_combining_frames_and_markers_only(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "render-frames",
+                    str(blend_file),
+                    str(output_dir),
+                    "--frames",
+                    "1",
+                    "--markers-only",
+                ]
+            )
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "not allowed with" in captured.err
 
     def test_rejects_invalid_frames_spec(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -164,6 +206,68 @@ class TestRefreshCommand:
         assert manifest["frames"] == ["render/0001.png", "render/0002.png"]
         assert manifest["markers"] == [0, 1]
         assert "token" in manifest
+
+    def test_writes_markers_only_manifest(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        render_dir = output_dir / "render"
+        render_dir.mkdir(parents=True)
+        (render_dir / "0001.png").write_bytes(b"frame-1")
+        (render_dir / "0003.png").write_bytes(b"frame-3")
+
+        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
+        monkeypatch.setattr(
+            "holodeck.cli.extract_blend_metadata",
+            lambda **kwargs: BlendMetadata(
+                fps=24,
+                frame_start=1,
+                frame_end=3,
+                marker_frames=[1, 3],
+                frame_paths=[
+                    str(render_dir / "0001.png"),
+                    str(render_dir / "0002.png"),
+                    str(render_dir / "0003.png"),
+                ],
+            ),
+        )
+
+        exit_code = main(["refresh", str(blend_file), str(output_dir), "--markers-only"])
+
+        assert exit_code == 0
+        manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["frames"] == ["render/0001.png", "render/0003.png"]
+        assert manifest["markers"] == [0, 1]
+
+    def test_markers_only_fails_when_marker_frames_missing(self, monkeypatch, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        render_dir = output_dir / "render"
+        render_dir.mkdir(parents=True)
+        (render_dir / "0002.png").write_bytes(b"frame-2")
+
+        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
+        monkeypatch.setattr(
+            "holodeck.cli.extract_blend_metadata",
+            lambda **kwargs: BlendMetadata(
+                fps=24,
+                frame_start=1,
+                frame_end=3,
+                marker_frames=[1, 3],
+                frame_paths=[
+                    str(render_dir / "0001.png"),
+                    str(render_dir / "0002.png"),
+                    str(render_dir / "0003.png"),
+                ],
+            ),
+        )
+
+        exit_code = main(["refresh", str(blend_file), str(output_dir), "--markers-only"])
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Missing 2 rendered frame(s)" in captured.err
 
     def test_fails_when_expected_frames_are_missing(self, monkeypatch, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -214,6 +318,25 @@ class TestBuildCommand:
             ("render", str(blend_file), str(output_dir), 200),
             ("manifest", str(blend_file), str(output_dir), 200),
         ]
+
+    def test_propagates_markers_only_to_render_and_refresh(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr(
+            "holodeck.cli.render_frames_command",
+            lambda args: calls.append(("render", args.markers_only)) or 0,
+        )
+        monkeypatch.setattr(
+            "holodeck.cli.refresh_command",
+            lambda args: calls.append(("manifest", args.markers_only)) or 0,
+        )
+
+        exit_code = main(["build", str(blend_file), str(output_dir), "--markers-only"])
+
+        assert exit_code == 0
+        assert calls == [("render", True), ("manifest", True)]
 
 
 class TestServeCommand:

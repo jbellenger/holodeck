@@ -7,6 +7,7 @@ from .exporter import (
     get_render_dir,
     resolve_export_root,
     write_manifest_from_frames,
+    write_markers_only_manifest_from_frames,
 )
 from .manifest_generator import ManifestGenerator
 from .render_settings import HOLODECK_RENDER_FILE_FORMAT, configure_scene_for_holodeck_render
@@ -44,4 +45,5 @@ __all__ = [
     "create_server",
     "deploy_player",
     "write_manifest_from_frames",
+    "write_markers_only_manifest_from_frames",
 ]

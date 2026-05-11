@@ -131,6 +131,41 @@ class TestRenderBlend:
         render_blend(blend_file=blend_file, output_dir=output_dir)
 
         assert "--frames" not in captured["script_args"]
+        assert "--markers-only" not in captured["script_args"]
+
+    def test_forwards_markers_only_option(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        captured = {}
+
+        def fake_run_blender_script(**kwargs):
+            captured.update(kwargs)
+
+        monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
+
+        render_blend(blend_file=blend_file, output_dir=output_dir, markers_only=True)
+
+        assert captured["script_args"] == [
+            "--output",
+            str(output_dir),
+            "--res-pct",
+            "100",
+            "--markers-only",
+        ]
+
+    def test_rejects_combining_frames_and_markers_only(self, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(ValueError, match="frames"):
+            render_blend(
+                blend_file=blend_file,
+                output_dir=output_dir,
+                frames="1",
+                markers_only=True,
+            )
 
 
 class TestExtractBlendMetadata:

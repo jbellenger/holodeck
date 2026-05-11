@@ -104,3 +104,20 @@ def write_manifest_from_frames(
     manifest_path = Path(export_root) / DEFAULT_MANIFEST_FILENAME
     ManifestGenerator().write_manifest(manifest, str(manifest_path))
     return manifest_path, manifest
+
+
+def write_markers_only_manifest_from_frames(
+    frame_paths: Iterable[str],
+    fps: int,
+    export_root: Path,
+) -> Tuple[Path, Dict[str, Any]]:
+    """Write a manifest where every supplied frame is treated as a marker."""
+    generator = ManifestGenerator()
+    for frame_path in frame_paths:
+        generator.add_frame(frame_path)
+
+    markers = list(range(len(generator.frames)))
+    manifest = generator.generate_manifest(fps, markers, root_dir=export_root)
+    manifest_path = Path(export_root) / DEFAULT_MANIFEST_FILENAME
+    generator.write_manifest(manifest, str(manifest_path))
+    return manifest_path, manifest
