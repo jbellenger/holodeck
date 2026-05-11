@@ -35,6 +35,7 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     styles_css = (ROOT_DIR / "holodeck" / "resources" / "styles.css").read_text(encoding="utf-8")
 
     assert '<canvas id="canvas"></canvas>' in index_html
+    assert '<div id="advance-hint" hidden></div>' in index_html
     assert '<div id="playback-indicator" aria-hidden="true" hidden></div>' in index_html
     assert 'const loadingIndicatorDelayMillis = 32;' in player_js
     assert 'const optimisticPreloadSegmentCount = 2;' in player_js
@@ -43,12 +44,14 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert 'const decodedFrameBufferBehind = 1;' in player_js
     assert 'const decodedFrameConcurrency = 3;' in player_js
     assert 'const playbackIndicatorSize = 2;' in player_js
+    assert 'const advanceHintDurationMillis = 5000;' in player_js
     assert 'case "ArrowDown":' in player_js
     assert 'case "Enter":' in player_js
     assert 'case "KeyF":' in player_js
     assert 'requestAnimationFrame(loop);' in player_js
     assert "createImageBitmap" in player_js
     assert 'document.getElementById("canvas")' in player_js
+    assert 'document.getElementById("advance-hint")' in player_js
     assert "requestFullscreen" in player_js
     assert 'screen.orientation.lock("landscape")' in player_js
     assert "screen.orientation.unlock();" in player_js
@@ -75,3 +78,12 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert "width: 2px;" in styles_css
     assert "height: 2px;" in styles_css
     assert "pointer-events: none;" in styles_css
+    assert "Press space to advance" in player_js
+    assert "Tap to advance" in player_js
+    assert "document.hidden" in player_js
+    assert 'document.addEventListener("visibilitychange", handleVisibilityChange);' in player_js
+    assert 'addEventListener("keydown", dismissAdvanceHint, { capture: true });' in player_js
+    assert 'addEventListener("keyup", dismissAdvanceHint' not in player_js
+    assert 'container.addEventListener("touchstart", dismissAdvanceHint' in player_js
+    assert 'container.addEventListener("touchmove", dismissAdvanceHint' in player_js
+    assert "#advance-hint" in styles_css

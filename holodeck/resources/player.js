@@ -6,6 +6,7 @@ const decodedFrameBufferAhead = 6;
 const decodedFrameBufferBehind = 1;
 const decodedFrameConcurrency = 3;
 const playbackIndicatorSize = 2;
+const advanceHintDurationMillis = 5000;
 
 class CancelledActionError extends Error {
   constructor() {
@@ -21,6 +22,7 @@ class CancelledActionError extends Error {
   const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
   const status = document.getElementById("status");
   const message = document.getElementById("message");
+  const advanceHint = document.getElementById("advance-hint");
   const container = document.getElementById("container");
   const loadingBar = document.getElementById("loading-bar");
   const loadingProgress = document.getElementById("loading-progress");
@@ -41,6 +43,10 @@ class CancelledActionError extends Error {
   let pendingLoadingState = null;
   let touchStartPoint = null;
   let resizeQueued = false;
+  let advanceHintDismissed = false;
+  let advanceHintShown = false;
+  let advanceHintHideAt = 0;
+  let advanceHintTimeout = null;
   const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
   const warmedFrames = new Array(frameUrls.length).fill(false);
   const frameWarmPromises = new Array(frameUrls.length).fill(null);
@@ -53,6 +59,7 @@ class CancelledActionError extends Error {
 
   function showMessage(messageText) {
     announceStatus(messageText);
+    dismissAdvanceHint();
     hideLoadingProgress();
     message.textContent = messageText;
     message.style.display = "block";
@@ -61,6 +68,66 @@ class CancelledActionError extends Error {
   function hideMessage() {
     message.style.display = "none";
     message.textContent = "";
+  }
+
+  function isTouchNavigationDevice() {
+    return (
+      (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) ||
+      navigator.maxTouchPoints > 0
+    );
+  }
+
+  function getAdvanceHintText() {
+    return isTouchNavigationDevice() ? "Tap to advance" : "Press space to advance";
+  }
+
+  function scheduleAdvanceHintTimeout() {
+    if (advanceHintTimeout !== null) {
+      clearTimeout(advanceHintTimeout);
+    }
+
+    advanceHintTimeout = setTimeout(
+      dismissAdvanceHint,
+      Math.max(0, advanceHintHideAt - Date.now())
+    );
+  }
+
+  function showAdvanceHintWhenVisible() {
+    if (advanceHintDismissed || advanceHintShown || !ready || document.hidden) {
+      return;
+    }
+
+    advanceHint.textContent = getAdvanceHintText();
+    advanceHint.hidden = false;
+    advanceHintShown = true;
+    advanceHintHideAt = Date.now() + advanceHintDurationMillis;
+    scheduleAdvanceHintTimeout();
+  }
+
+  function dismissAdvanceHint() {
+    advanceHintDismissed = true;
+
+    if (advanceHintTimeout !== null) {
+      clearTimeout(advanceHintTimeout);
+      advanceHintTimeout = null;
+    }
+
+    advanceHint.hidden = true;
+    advanceHint.textContent = "";
+  }
+
+  function handleVisibilityChange() {
+    if (advanceHintShown && Date.now() >= advanceHintHideAt) {
+      dismissAdvanceHint();
+      return;
+    }
+
+    if (advanceHintShown) {
+      scheduleAdvanceHintTimeout();
+      return;
+    }
+
+    showAdvanceHintWhenVisible();
   }
 
   function showPlaybackIndicator() {
@@ -757,6 +824,7 @@ class CancelledActionError extends Error {
     });
   }
 
+  addEventListener("keydown", dismissAdvanceHint, { capture: true });
   addEventListener("keydown", (event) => {
     if (!ready) return;
 
@@ -794,6 +862,12 @@ class CancelledActionError extends Error {
 
   addEventListener("resize", queueCurrentFrameRedraw);
   document.addEventListener("fullscreenchange", queueCurrentFrameRedraw);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  container.addEventListener("touchstart", dismissAdvanceHint, { passive: true, capture: true });
+  container.addEventListener("touchmove", dismissAdvanceHint, { passive: true, capture: true });
+  container.addEventListener("touchend", dismissAdvanceHint, { passive: true, capture: true });
+  container.addEventListener("touchcancel", dismissAdvanceHint, { passive: true, capture: true });
 
   container.addEventListener("touchstart", (event) => {
     if (event.touches.length !== 1) {
@@ -833,6 +907,7 @@ class CancelledActionError extends Error {
     await renderFrame(0, { actionId: initialActionId });
     ready = true;
     showPlayer();
+    showAdvanceHintWhenVisible();
     scheduleDecodedBuffer(0, { actionId: initialActionId });
     scheduleOptimisticPreload(0, { excludeFrame: 0 });
   } catch (error) {

@@ -32,7 +32,8 @@ body {
   border: 0;
 }
 
-#message {
+#message,
+#advance-hint {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -41,6 +42,18 @@ body {
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.65);
   letter-spacing: 0.02em;
+}
+
+#message {
+  display: none;
+}
+
+#advance-hint {
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+#advance-hint[hidden] {
   display: none;
 }
 
