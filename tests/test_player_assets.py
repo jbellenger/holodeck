@@ -35,12 +35,14 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     styles_css = (ROOT_DIR / "holodeck" / "resources" / "styles.css").read_text(encoding="utf-8")
 
     assert '<canvas id="canvas"></canvas>' in index_html
+    assert '<div id="playback-indicator" aria-hidden="true" hidden></div>' in index_html
     assert 'const loadingIndicatorDelayMillis = 32;' in player_js
     assert 'const optimisticPreloadSegmentCount = 2;' in player_js
     assert 'const swipeThresholdPixels = 48;' in player_js
     assert 'const decodedFrameBufferAhead = 6;' in player_js
     assert 'const decodedFrameBufferBehind = 1;' in player_js
     assert 'const decodedFrameConcurrency = 3;' in player_js
+    assert 'const playbackIndicatorSize = 2;' in player_js
     assert 'case "ArrowDown":' in player_js
     assert 'case "Enter":' in player_js
     assert 'case "KeyF":' in player_js
@@ -62,3 +64,14 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert 'const warmedBlob = await warmFrame(frameIndex);' in player_js
     assert 'const workerCount = Math.min(decodedFrameConcurrency, pendingFrames.length);' in player_js
     assert "touch-action: manipulation;" in styles_css
+    assert 'document.getElementById("playback-indicator")' in player_js
+    assert "updatePlaybackIndicatorPosition(dx, dy, drawWidth, drawHeight);" in player_js
+    assert "canvas.getBoundingClientRect()" in player_js
+    assert "playbackIndicator.style.left" in player_js
+    assert "playbackIndicator.style.top" in player_js
+    assert "showPlaybackIndicator();" in player_js
+    assert "hidePlaybackIndicator();" in player_js
+    assert "#playback-indicator" in styles_css
+    assert "width: 2px;" in styles_css
+    assert "height: 2px;" in styles_css
+    assert "pointer-events: none;" in styles_css

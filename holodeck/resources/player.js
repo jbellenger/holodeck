@@ -5,6 +5,7 @@ const swipeThresholdPixels = 48;
 const decodedFrameBufferAhead = 6;
 const decodedFrameBufferBehind = 1;
 const decodedFrameConcurrency = 3;
+const playbackIndicatorSize = 2;
 
 class CancelledActionError extends Error {
   constructor() {
@@ -23,6 +24,7 @@ class CancelledActionError extends Error {
   const container = document.getElementById("container");
   const loadingBar = document.getElementById("loading-bar");
   const loadingProgress = document.getElementById("loading-progress");
+  const playbackIndicator = document.getElementById("playback-indicator");
   const markerSet = new Set(markers);
 
   if (!context) {
@@ -59,6 +61,26 @@ class CancelledActionError extends Error {
   function hideMessage() {
     message.style.display = "none";
     message.textContent = "";
+  }
+
+  function showPlaybackIndicator() {
+    playbackIndicator.hidden = false;
+  }
+
+  function hidePlaybackIndicator() {
+    playbackIndicator.hidden = true;
+  }
+
+  function updatePlaybackIndicatorPosition(frameX, frameY, frameWidth, frameHeight) {
+    const canvasRect = canvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const cssScaleX = canvasRect.width / canvas.width;
+    const cssScaleY = canvasRect.height / canvas.height;
+    const frameRight = canvasRect.left - containerRect.left + (frameX + frameWidth) * cssScaleX;
+    const frameBottom = canvasRect.top - containerRect.top + (frameY + frameHeight) * cssScaleY;
+
+    playbackIndicator.style.left = `${Math.max(0, frameRight - playbackIndicatorSize)}px`;
+    playbackIndicator.style.top = `${Math.max(0, frameBottom - playbackIndicatorSize)}px`;
   }
 
   function renderLoadingProgress(completed = null, total = null) {
@@ -141,6 +163,7 @@ class CancelledActionError extends Error {
     const dy = (canvas.height - drawHeight) / 2;
 
     context.drawImage(source, dx, dy, drawWidth, drawHeight);
+    updatePlaybackIndicatorPosition(dx, dy, drawWidth, drawHeight);
   }
 
   function showPlayer() {
@@ -150,6 +173,7 @@ class CancelledActionError extends Error {
   }
 
   function startAction() {
+    hidePlaybackIndicator();
     lastActionId += 1;
     return lastActionId;
   }
@@ -661,10 +685,16 @@ class CancelledActionError extends Error {
     scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
 
     const segmentEnd = getSegmentEnd(clampedFrame);
+    if (clampedFrame >= segmentEnd || clampedFrame === frameUrls.length - 1) {
+      playing = false;
+      return;
+    }
+
     const startTimestamp = performance.now();
 
     function loop(timestamp) {
       if (!playing || !isActionActive(actionId)) {
+        hidePlaybackIndicator();
         return;
       }
 
@@ -688,6 +718,7 @@ class CancelledActionError extends Error {
       const isMarker = currentFrame !== clampedFrame && markerSet.has(currentFrame);
       if (currentFrame >= segmentEnd || isLast || isMarker) {
         playing = false;
+        hidePlaybackIndicator();
         scheduleOptimisticPreload(currentFrame, { excludeFrame: currentFrame });
         return;
       }
@@ -695,6 +726,7 @@ class CancelledActionError extends Error {
       requestAnimationFrame(loop);
     }
 
+    showPlaybackIndicator();
     requestAnimationFrame(loop);
   }
 
@@ -707,6 +739,7 @@ class CancelledActionError extends Error {
     }
 
     playing = false;
+    hidePlaybackIndicator();
     hideLoadingProgress();
     showMessage("Failed to load frames");
     console.error(error);

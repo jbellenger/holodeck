@@ -66,6 +66,20 @@ body {
   animation: loading-slide 1.1s ease-in-out infinite;
 }
 
+#playback-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 2px;
+  background: #fff;
+  pointer-events: none;
+}
+
+#playback-indicator[hidden] {
+  display: none;
+}
+
 @keyframes loading-slide {
   from {
     transform: translateX(-100%);
