@@ -222,6 +222,12 @@ class TestDeployPlayer:
         assert "<html>" in content
         assert "player.js" in content
 
+    def test_deploy_writes_custom_page_title(self, tmp_path):
+        player_dir = deploy_player(tmp_path, title="Demo <Deck> & Notes")
+        content = (player_dir / "index.html").read_text(encoding="utf-8")
+
+        assert "<title>Demo &lt;Deck&gt; &amp; Notes</title>" in content
+
     def test_deploy_custom_dirname(self, tmp_path):
         player_dir = deploy_player(tmp_path, "my-player")
         assert player_dir.name == "my-player"

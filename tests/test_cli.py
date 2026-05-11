@@ -23,6 +23,7 @@ class TestCliHelp:
         assert "--blender BLENDER" in captured.out
         assert "--res-pct RES_PCT" in captured.out
         assert "--scene SCENE" in captured.out
+        assert "--title TITLE" in captured.out
         assert "--port PORT" in captured.out
         assert "--no-open" in captured.out
         assert "render-frames\n  Render frames from a .blend file into an output directory." in captured.out
@@ -43,6 +44,7 @@ class TestCliHelp:
         assert "--blender BLENDER" in captured.out
         assert "--res-pct RES_PCT" in captured.out
         assert "--scene SCENE" in captured.out
+        assert "--title TITLE" in captured.out
         assert "--port PORT" in captured.out
         assert "--no-open" in captured.out
         assert "serve\n  Serve an output directory locally for development." in captured.out
@@ -70,6 +72,25 @@ class TestRenderFramesCommand:
         assert calls[1][0] == "render"
         assert calls[1][1]["blend_file"] == blend_file.resolve()
         assert calls[1][1]["res_pct"] == 50
+
+    def test_passes_title_option_to_player_deploy(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr(
+            "holodeck.cli.deploy_player",
+            lambda path, title=None: calls.append(("deploy", path, title)),
+        )
+        monkeypatch.setattr("holodeck.cli.render_blend", lambda **kwargs: None)
+
+        exit_code = main(
+            ["render-frames", str(blend_file), str(output_dir), "--title", "Demo Deck"]
+        )
+
+        assert exit_code == 0
+        assert calls == [("deploy", output_dir.resolve(), "Demo Deck")]
 
     def test_rejects_non_positive_resolution_percentage(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -337,6 +358,25 @@ class TestBuildCommand:
 
         assert exit_code == 0
         assert calls == [("render", True), ("manifest", True)]
+
+    def test_propagates_title_to_render_and_refresh(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr(
+            "holodeck.cli.render_frames_command",
+            lambda args: calls.append(("render", args.title)) or 0,
+        )
+        monkeypatch.setattr(
+            "holodeck.cli.refresh_command",
+            lambda args: calls.append(("manifest", args.title)) or 0,
+        )
+
+        exit_code = main(["build", str(blend_file), str(output_dir), "--title", "Demo Deck"])
+
+        assert exit_code == 0
+        assert calls == [("render", "Demo Deck"), ("manifest", "Demo Deck")]
 
 
 class TestServeCommand:

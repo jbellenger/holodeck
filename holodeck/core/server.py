@@ -3,6 +3,7 @@ Server-related logic for Holodeck.
 This module contains NO bpy imports and can be tested independently.
 """
 import http.server
+import html
 import shutil
 import socketserver
 from pathlib import Path
@@ -52,13 +53,18 @@ def get_resources_dir() -> Path:
     return get_package_path("resources")
 
 
-def deploy_player(target_dir: Path, player_dirname: str = DEFAULT_PLAYER_DIR) -> Path:
+def deploy_player(
+    target_dir: Path,
+    player_dirname: str = DEFAULT_PLAYER_DIR,
+    title: str | None = None,
+) -> Path:
     """
     Deploy the player files to the target directory.
 
     Args:
         target_dir: Directory to deploy into
         player_dirname: Name for the player subdirectory
+        title: Optional HTML page title to write into index.html
 
     Returns:
         Path to the deployed player directory
@@ -80,10 +86,29 @@ def deploy_player(target_dir: Path, player_dirname: str = DEFAULT_PLAYER_DIR) ->
         destination = player_dir / resource.name
         if resource.is_dir():
             shutil.copytree(resource, destination, dirs_exist_ok=True)
+        elif resource.name == "index.html" and title is not None:
+            destination.write_text(
+                _set_index_title(resource.read_text(encoding="utf-8"), title),
+                encoding="utf-8",
+            )
         else:
             shutil.copy2(resource, destination)
 
     return player_dir
+
+
+def _set_index_title(index_html: str, title: str) -> str:
+    """Return index.html with a safely escaped title element."""
+    start_tag = "<title>"
+    end_tag = "</title>"
+    start = index_html.find(start_tag)
+    end = index_html.find(end_tag, start + len(start_tag))
+    if start == -1 or end == -1:
+        raise ValueError("Player index.html is missing a <title> element")
+
+    title_start = start + len(start_tag)
+    escaped_title = html.escape(title, quote=False)
+    return f"{index_html[:title_start]}{escaped_title}{index_html[end:]}"
 
 
 def get_player_url(port: int, player_path: str = DEFAULT_PLAYER_DIR) -> str:

@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_blend_arguments(render_parser)
     _add_render_arguments(render_parser)
+    _add_player_arguments(render_parser)
     render_frame_selection = render_parser.add_mutually_exclusive_group()
     render_frame_selection.add_argument(
         "--frames",
@@ -61,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Refresh manifest.json and player assets from a .blend file and rendered output.",
     )
     _add_blend_arguments(refresh_parser)
+    _add_player_arguments(refresh_parser)
     refresh_parser.add_argument(
         "--markers-only",
         action="store_true",
@@ -76,6 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_blend_arguments(build_parser)
     _add_render_arguments(build_parser)
+    _add_player_arguments(build_parser)
     build_parser.add_argument(
         "--markers-only",
         action="store_true",
@@ -220,6 +223,13 @@ def _add_render_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_player_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--title",
+        help="HTML page title for the generated Holodeck player.",
+    )
+
+
 def _resolve_blend_file(blend_file: str) -> Path:
     blend_path = Path(blend_file).expanduser().resolve()
     if not blend_path.is_file():
@@ -244,7 +254,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
     blend_file = _resolve_blend_file(args.blend_file)
     output_dir = _resolve_output_dir(args.output_dir)
 
-    deploy_player(output_dir)
+    _deploy_player(output_dir, args)
     render_blend(
         blend_file=blend_file,
         output_dir=output_dir,
@@ -264,7 +274,7 @@ def refresh_command(args: argparse.Namespace) -> int:
     output_dir = _resolve_output_dir(args.output_dir)
     markers_only = getattr(args, "markers_only", False)
 
-    deploy_player(output_dir)
+    _deploy_player(output_dir, args)
     metadata = extract_blend_metadata(
         blend_file=blend_file,
         output_dir=output_dir,
@@ -311,6 +321,14 @@ def _select_marker_frame_paths(metadata) -> list[str]:
         if 0 <= index < frame_count:
             paths.append(metadata.frame_paths[index])
     return paths
+
+
+def _deploy_player(output_dir: Path, args: argparse.Namespace) -> None:
+    title = getattr(args, "title", None)
+    if title is None:
+        deploy_player(output_dir)
+    else:
+        deploy_player(output_dir, title=title)
 
 
 def build_command(args: argparse.Namespace) -> int:

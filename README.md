@@ -76,6 +76,7 @@ That produces both `dist/holodeck` (PyInstaller) and `dist/holodeck.pex` (PEX).
 ```bash
 holodeck build demo/demo.blend dist/demo
 holodeck refresh demo/demo.blend dist/demo
+holodeck build demo/demo.blend dist/demo --title "Demo Deck"
 holodeck serve dist/demo --port 8000
 holodeck serve dist/demo --no-open
 ```
@@ -83,6 +84,7 @@ holodeck serve dist/demo --no-open
 - `build`: render a `.blend` file into a static directory you can upload to a site
 - `refresh`: rebuild `manifest.json` and reinstall player assets for an existing render output
 - `serve`: preview an existing Holodeck directory locally
+- `--title`: set the generated player page title for `build`, `refresh`, or `render-frames`
 
 ## Standalone Executables
 
