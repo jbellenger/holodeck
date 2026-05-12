@@ -61,6 +61,9 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert "event.touches[0].clientX" in player_js
     assert "event.touches[0].clientY" in player_js
     assert "handleTouchGesture(event.changedTouches[0])" in player_js
+    assert "function advancePlayback()" in player_js
+    assert "function togglePlayback()" not in player_js
+    assert "if (!ready || playing)" in player_js
     assert "jump(-1);" in player_js
     assert "scheduleOptimisticPreload" in player_js
     assert "scheduleDecodedBuffer" in player_js

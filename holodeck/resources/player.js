@@ -623,10 +623,8 @@ class CancelledActionError extends Error {
     }
   }
 
-  function togglePlayback() {
+  function advancePlayback() {
     if (playing) {
-      playing = false;
-      startAction();
       return;
     }
 
@@ -696,7 +694,7 @@ class CancelledActionError extends Error {
   }
 
   function handleTouchAction(clientX) {
-    if (!ready) {
+    if (!ready || playing) {
       return;
     }
 
@@ -710,7 +708,7 @@ class CancelledActionError extends Error {
       return;
     }
 
-    togglePlayback();
+    advancePlayback();
   }
 
   function handleTouchGesture(endPoint) {
@@ -847,7 +845,7 @@ class CancelledActionError extends Error {
           break;
         }
 
-        togglePlayback();
+        advancePlayback();
         break;
       case "KeyF":
         event.preventDefault();
