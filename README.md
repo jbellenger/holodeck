@@ -1,127 +1,155 @@
 # Holodeck
 
-Holodeck is a CLI tool and webapp that renders Blender animations as slide decks that can be viewed in a web-browser.
+Holodeck is a CLI tool and web app that renders Blender animations as slide decks
+that can be viewed in a web browser.
 
-Because the Holodeck webapp displays pre-rendered frames, the resulting slide deck presentation allows slide decks that are higher fidelity than what can be achieved with a tool like google slides, in a way that appears to be realtime (but isn't).
+Because Holodeck works with pre-rendered frames, it can produce slide decks with
+much higher visual fidelity than a tool like Google Slides, while still feeling
+real-time during a presentation.
+
+Holodeck renders frames as avif images, which has excellent compression and is
+supported in all browsers.
 
 Live demo: [jbellenger.github.io/holodeck](https://jbellenger.github.io/holodeck/)
 
-Holodeck uses Blender frame markers (default blender key-binding: <kbd>M</kbd>) as pause points. Pressing space in the holodeck webapp will animate (using the frame rate configured in blender) until the next pause point.
+## Quickstart
 
-To turn a `.blend` file into something you can upload to a static host, run:
+### 1. Build Holodeck From Source
 
-```bash
-holodeck build demo/demo.blend dist/demo
-```
+Holodeck requires Python 3.11 or newer. Blender must also be available on your
+`PATH` unless you pass a specific Blender executable with `--blender`.
 
-That creates `dist/demo`, which you can upload to GitHub Pages, S3, or any other static host. To preview the same directory locally, run:
-
-```bash
-holodeck serve dist/demo
-```
-
-That command opens the local player URL in your default browser. Use `--no-open` to skip that behavior.
-
-## Configuring a Blend File
-
-Holodeck reads the active scene's frame range, fps, and timeline markers from Blender.
-
-- `frame_start` and `frame_end` define the rendered frame span.
-- Timeline markers define presentation boundaries. Put a marker on the frame where a section should begin.
-- In the browser player, left and right navigation jumps between marker frames, and playback stops when it reaches the next marker or the end of the animation.
-- Marker names are ignored. Only their frame numbers matter.
-- Marker frame numbers are interpreted relative to the scene's start frame, so a marker on the first rendered frame becomes marker `0` in the exported manifest.
-- Markers outside the rendered frame range are ignored.
-
-## Project Layout
-
-- `holodeck/`: Python package and CLI entrypoint
-- `holodeck/core/`: testable logic for Blender invocation, manifest generation, and serving
-- `holodeck/resources/`: browser player assets bundled with the package and used for local exports, static hosting, and distributable builds
-- `demo/`: canonical demo source files, including `demo.blend` and tracked rendered frames
-- `docs/`: generated local demo output built from `demo/`
-- `tests/`: pytest coverage for core logic and CLI behavior
-- `tests/fixtures/blends/`: Blender fixtures for render override integration tests
-
-## Quick Start
-
-1. Create the virtual environment and install dependencies:
+From a fresh checkout, create the local virtual environment and build the
+standalone CLI:
 
 ```bash
 make setup
-```
-
-2. Build the standalone `holodeck` executable:
-
-```bash
 make build
 ```
 
-That produces both `dist/holodeck` (PyInstaller) and `dist/holodeck.pex` (PEX).
+This produces:
 
-3. Build an export from a `.blend` file:
-
-```bash
-./dist/holodeck build demo/demo.blend dist/demo
-```
-
-4. Serve it locally:
-
-```bash
-./dist/holodeck serve dist/demo
-```
-
-## CLI Commands
-
-```bash
-holodeck build demo/demo.blend dist/demo
-holodeck refresh demo/demo.blend dist/demo
-holodeck build demo/demo.blend dist/demo --title "Demo Deck"
-holodeck serve dist/demo --port 8000
-holodeck serve dist/demo --no-open
-```
-
-- `build`: render a `.blend` file into a static directory you can upload to a site
-- `refresh`: rebuild `manifest.json` and reinstall player assets for an existing render output
-- `serve`: preview an existing Holodeck directory locally
-- `--title`: set the generated player page title for `build`, `refresh`, or `render-frames`
-
-## Standalone Executables
-
-You can build both standalone executables:
-
-```bash
-make build
-```
-
-That produces:
-
-- `dist/holodeck`: a PyInstaller single-file binary
+- `dist/holodeck`: a PyInstaller single-file executable
 - `dist/holodeck.pex`: a PEX executable built from the same CLI entrypoint
 
-You can also build them individually:
+The examples below use `./dist/holodeck`. If you only need the editable
+development install, you can use `./holodeck-venv/bin/holodeck` after running
+`make setup`.
+
+### 2. Configure Your Blend File
+
+Holodeck reads presentation timing from the active Blender scene:
+
+- The scene frame range controls which frames are exported.
+- The scene FPS controls playback speed in the browser.
+- Timeline markers define slide boundaries and pause points.
+- Marker names are ignored; only marker frame numbers matter.
+
+In Blender, add timeline markers with <kbd>M</kbd> on the frames where the
+presentation should pause. During playback, pressing space or tapping advances
+from the current marker to the next marker.
+
+Markers outside the rendered frame range are ignored. Marker frame numbers are
+stored relative to the scene start frame, so a marker on the first rendered frame
+becomes marker `0` in the exported manifest.
+
+### 3. Build Your Holodeck
+
+Run `build` with a source `.blend` file and an output directory:
 
 ```bash
-make build-pyinstaller
-make build-pex
+./dist/holodeck build path/to/deck.blend dist/deck --title "My Deck"
 ```
 
-- The file is movable on the same machine.
-- The executable bundles Python, the player assets, and the Blender helper scripts.
-- It is distributable to other machines of the same OS and CPU architecture with Blender available on `PATH`.
-- It is not a cross-platform binary. Build it separately on macOS, Linux, and Windows if you need all three.
+`build` renders the frames, writes `manifest.json`, and installs the browser
+player assets into the output directory. The result is a static site that can be
+served locally or uploaded to a static host.
 
-## Common Commands
+Useful build options:
 
-- `make setup`: create `holodeck-venv/` and install the package plus pytest
-- `make test`: run the full test suite
-- `make test-one TEST=test_add_frame`: run a focused test
-- `make build`: produce both `dist/holodeck` and `dist/holodeck.pex`
-- `make build-pyinstaller`: produce the standalone `dist/holodeck` binary with PyInstaller
-- `make build-pex`: produce the standalone `dist/holodeck.pex` executable with PEX
-- `make build-demo`: rebuild `docs/` from `demo/demo.blend` and `demo/render/`
-- `make regen-blend-fixtures`: rebuild the tracked Blender test fixtures
-- `make serve-demo`: serve `docs/` on port `8000` using `dist/holodeck`
-- `make clean`: remove the virtualenv and Python cache files
+```bash
+./dist/holodeck build path/to/deck.blend dist/deck --scene "Scene"
+./dist/holodeck build path/to/deck.blend dist/deck --res-pct 50
+./dist/holodeck build path/to/deck.blend dist/deck --markers-only
+```
 
-`holodeck/resources/` is the canonical source for the browser player. Local source-tree exports, packaged builds, and distributable binaries all read from the same asset directory. GitHub Pages publishes a CI-generated artifact assembled from `demo/render/` plus `holodeck refresh` instead of serving checked-in `docs/` files.
+- `--scene` renders a specific Blender scene instead of the active scene.
+- `--res-pct` overrides Blender's render resolution percentage.
+- `--markers-only` renders only marker frames and writes a marker-only manifest.
+- `--title` sets the generated player page title.
+
+### 4. Play Your Holodeck Locally
+
+Use `serve` to preview an existing Holodeck output directory:
+
+```bash
+./dist/holodeck serve dist/deck
+```
+
+By default, the server binds to port `8000` and opens the player in your default
+browser. You can override either behavior:
+
+```bash
+./dist/holodeck serve dist/deck --port 9000
+./dist/holodeck serve dist/deck --no-open
+```
+
+Common presenter shortcuts:
+
+- Press space or tap to animate to the next marker. A small white pixel appears
+  in the bottom-right corner of the visible frame while animation is running.
+- Press the left or right arrow keys to jump between markers.
+- Press <kbd>F</kbd> or swipe up to enter fullscreen.
+
+### 5. Refresh Your Holodeck
+
+Use `refresh` when the rendered frame files already exist, but the player bundle
+or manifest needs to be regenerated. A common example is moving timeline markers
+after rendering; `refresh` can update `manifest.json` without re-rendering every
+frame.
+
+```bash
+./dist/holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
+```
+
+`refresh` reads the Blend file metadata, verifies that the expected rendered
+frames exist, rewrites `manifest.json`, and reinstalls the browser player assets.
+If the actual frame images changed, use `build` or `render-frames` instead.
+
+### 6. Render a Subset of Frames
+
+Use `render-frames` with `--frames` when only a few frame images need to be
+re-rendered:
+
+```bash
+./dist/holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96"
+./dist/holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
+```
+
+Frame ranges are inclusive, and comma-separated segments are allowed. For
+example, `"4"`, `"4-10"`, and `"1,2,3,20-24"` are all valid frame specs.
+
+`render-frames` updates files under `render/`, but it does not update
+`manifest.json`, so run `refresh` afterwards when the manifest should reflect
+new Blend metadata or rendered frame fingerprints.
+
+### 7. Deploy Your Holodeck
+
+A built Holodeck output directory is a static site. Upload the contents of the
+output directory to any static host, such as GitHub Pages, S3, CloudFront,
+Netlify, or Cloudflare Pages.
+
+For GitHub Pages, publish the output directory as your Pages artifact or copy it
+to the branch or directory configured for Pages. If you publish from a directory
+named `docs/`, add a `.nojekyll` file so GitHub Pages serves the bundled assets
+without Jekyll processing.
+
+For S3, sync the output directory to a bucket configured for static website
+hosting or serve it through CloudFront:
+
+```bash
+aws s3 sync dist/deck s3://your-bucket/path/
+```
+
+The player uses relative asset paths, so the same output can be served from a
+domain root or a subdirectory.
