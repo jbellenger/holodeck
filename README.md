@@ -1,6 +1,6 @@
 # Holodeck
 
-Holodeck is a CLI tool and web app that renders Blender animations as slide decks
+Holodeck is a command-line tool that renders Blender animations as slide decks
 that can be viewed in a web browser.
 
 Because Holodeck works with pre-rendered frames, it can produce slide decks with
