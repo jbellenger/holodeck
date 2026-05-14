@@ -11,20 +11,32 @@ from pathlib import Path
 
 def get_pyinstaller_executable() -> Path:
     """Return the PyInstaller console script next to the active interpreter."""
-    scripts_dir = Path(sys.executable).parent
-    candidates = ["pyinstaller"]
-    if os.name == "nt":
-        candidates.insert(0, "pyinstaller.exe")
-
-    for candidate in candidates:
-        executable = scripts_dir / candidate
+    for executable in get_pyinstaller_executable_candidates(Path(sys.executable), os.name):
         if executable.is_file():
             return executable
 
     raise FileNotFoundError(
-        f"PyInstaller executable not found next to {sys.executable}. "
+        f"PyInstaller executable not found near {sys.executable}. "
         "Install the build dependencies first."
     )
+
+
+def get_pyinstaller_executable_candidates(python_executable: Path, os_name: str) -> list[Path]:
+    """Return the likely PyInstaller console script locations."""
+    python_dir = python_executable.parent
+    script_dirs = [python_dir]
+    if os_name == "nt":
+        script_dirs.append(python_dir / "Scripts")
+
+    candidates = ["pyinstaller"]
+    if os_name == "nt":
+        candidates.insert(0, "pyinstaller.exe")
+
+    executables = []
+    for scripts_dir in script_dirs:
+        for candidate in candidates:
+            executables.append(scripts_dir / candidate)
+    return executables
 
 
 def format_add_data(source: Path, destination: str) -> str:

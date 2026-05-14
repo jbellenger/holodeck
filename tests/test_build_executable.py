@@ -16,6 +16,25 @@ def load_build_executable_module():
 
 
 class TestBuildExecutableScript:
+    def test_finds_pyinstaller_next_to_active_interpreter(self, monkeypatch, tmp_path):
+        module = load_build_executable_module()
+        scripts_dir = tmp_path / "venv" / "bin"
+        scripts_dir.mkdir(parents=True)
+        pyinstaller = scripts_dir / "pyinstaller"
+        pyinstaller.touch()
+
+        monkeypatch.setattr(module.sys, "executable", str(scripts_dir / "python"))
+
+        assert module.get_pyinstaller_executable() == pyinstaller
+
+    def test_includes_windows_scripts_dir_candidate(self):
+        module = load_build_executable_module()
+        python_executable = Path("C:/hostedtoolcache/windows/Python/3.13.13/x64/python.exe")
+
+        candidates = module.get_pyinstaller_executable_candidates(python_executable, "nt")
+
+        assert python_executable.parent / "Scripts" / "pyinstaller.exe" in candidates
+
     def test_add_data_entries_include_full_package_tree(self):
         module = load_build_executable_module()
         repo_root = Path("/tmp/holodeck-repo")
