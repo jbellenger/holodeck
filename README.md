@@ -14,27 +14,31 @@ Live demo: [jbellenger.github.io/holodeck](https://jbellenger.github.io/holodeck
 
 ## Quickstart
 
-### 1. Build Holodeck From Source
+### 1. Download Holodeck
 
-Holodeck requires Python 3.11 or newer. Blender must also be available on your
-`PATH` unless you pass a specific Blender executable with `--blender`.
+Download the latest Holodeck asset for your system from the
+[Releases page](https://github.com/jbellenger/holodeck/releases). Choose the
+macOS, Linux, or Windows archive for a standalone executable.
 
-From a fresh checkout, create the local virtual environment and build the
-standalone CLI:
+Unpack the archive and put the `holodeck` executable somewhere on your `PATH`.
+Then check that it runs:
 
 ```bash
-make setup
-make build
+holodeck --help
 ```
 
-This produces:
+Blender must also be available on your `PATH` unless you pass a specific Blender
+executable with `--blender`.
 
-- `dist/holodeck`: a PyInstaller single-file executable
-- `dist/holodeck.pex`: a PEX executable built from the same CLI entrypoint
+If none of the standalone executable assets match your system, download the PEX
+asset instead. The PEX requires Python 3.11 or newer:
 
-The examples below use `./dist/holodeck`. If you only need the editable
-development install, you can use `./holodeck-venv/bin/holodeck` after running
-`make setup`.
+```bash
+python path/to/holodeck.pex --help
+```
+
+The examples below use `holodeck`. If you use the PEX asset, replace `holodeck`
+with `python path/to/holodeck.pex`.
 
 ### 2. Configure Your Blend File
 
@@ -58,7 +62,7 @@ becomes marker `0` in the exported manifest.
 Run `build` with a source `.blend` file and an output directory:
 
 ```bash
-./dist/holodeck build path/to/deck.blend dist/deck --title "My Deck"
+holodeck build path/to/deck.blend dist/deck --title "My Deck"
 ```
 
 `build` renders the frames, writes `manifest.json`, and installs the browser
@@ -68,10 +72,10 @@ served locally or uploaded to a static host.
 Useful build options:
 
 ```bash
-./dist/holodeck build path/to/deck.blend dist/deck --scene "Scene"
-./dist/holodeck build path/to/deck.blend dist/deck --res-pct 50
-./dist/holodeck build path/to/deck.blend dist/deck --render-engine cycles
-./dist/holodeck build path/to/deck.blend dist/deck --markers-only
+holodeck build path/to/deck.blend dist/deck --scene "Scene"
+holodeck build path/to/deck.blend dist/deck --res-pct 50
+holodeck build path/to/deck.blend dist/deck --render-engine cycles
+holodeck build path/to/deck.blend dist/deck --markers-only
 ```
 
 - `--scene` renders a specific Blender scene instead of the active scene.
@@ -85,15 +89,15 @@ Useful build options:
 Use `serve` to preview an existing Holodeck output directory:
 
 ```bash
-./dist/holodeck serve dist/deck
+holodeck serve dist/deck
 ```
 
 By default, the server binds to port `8000` and opens the player in your default
 browser. You can override either behavior:
 
 ```bash
-./dist/holodeck serve dist/deck --port 9000
-./dist/holodeck serve dist/deck --no-open
+holodeck serve dist/deck --port 9000
+holodeck serve dist/deck --no-open
 ```
 
 Common presenter shortcuts:
@@ -111,7 +115,7 @@ after rendering; `refresh` can update `manifest.json` without re-rendering every
 frame.
 
 ```bash
-./dist/holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
+holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
 ```
 
 `refresh` reads the Blend file metadata, verifies that the expected rendered
@@ -124,9 +128,9 @@ Use `render-frames` with `--frames` when only a few frame images need to be
 re-rendered:
 
 ```bash
-./dist/holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96"
-./dist/holodeck render-frames path/to/deck.blend dist/deck --render-engine workbench
-./dist/holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
+holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96"
+holodeck render-frames path/to/deck.blend dist/deck --render-engine workbench
+holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
 ```
 
 Frame ranges are inclusive, and comma-separated segments are allowed. For
@@ -169,14 +173,14 @@ Workbench rendering is useful when you want fast feedback on timing, camera
 motion, and animation. You can render the whole deck with Workbench first:
 
 ```bash
-./dist/holodeck build path/to/deck.blend dist/deck --render-engine workbench
+holodeck build path/to/deck.blend dist/deck --render-engine workbench
 ```
 
 After the timing feels right, you can re-render selected frames or ranges with a
 final engine. This is useful when only part of the deck needs more visual polish:
 
 ```bash
-./dist/holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96" --render-engine cycles
+holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96" --render-engine cycles
 ```
 
 You can also omit `--render-engine` during the final pass if the `.blend` file
