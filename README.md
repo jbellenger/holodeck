@@ -62,7 +62,7 @@ becomes marker `0` in the exported manifest.
 Run `build` with a source `.blend` file and an output directory:
 
 ```bash
-holodeck build path/to/deck.blend dist/deck --title "My Deck"
+holodeck build path/to/deck.blend dist --title "My Deck"
 ```
 
 `build` renders the frames, writes `manifest.json`, and installs the browser
@@ -72,10 +72,10 @@ served locally or uploaded to a static host.
 Useful build options:
 
 ```bash
-holodeck build path/to/deck.blend dist/deck --scene "Scene"
-holodeck build path/to/deck.blend dist/deck --res-pct 50
-holodeck build path/to/deck.blend dist/deck --render-engine cycles
-holodeck build path/to/deck.blend dist/deck --markers-only
+holodeck build path/to/deck.blend dist --scene "Scene"
+holodeck build path/to/deck.blend dist --res-pct 50
+holodeck build path/to/deck.blend dist --render-engine cycles
+holodeck build path/to/deck.blend dist --markers-only
 ```
 
 - `--scene` renders a specific Blender scene instead of the active scene.
@@ -89,15 +89,15 @@ holodeck build path/to/deck.blend dist/deck --markers-only
 Use `serve` to preview an existing Holodeck output directory:
 
 ```bash
-holodeck serve dist/deck
+holodeck serve dist
 ```
 
 By default, the server binds to port `8000` and opens the player in your default
 browser. You can override either behavior:
 
 ```bash
-holodeck serve dist/deck --port 9000
-holodeck serve dist/deck --no-open
+holodeck serve dist --port 9000
+holodeck serve dist --no-open
 ```
 
 Common presenter shortcuts:
@@ -115,7 +115,7 @@ after rendering; `refresh` can update `manifest.json` without re-rendering every
 frame.
 
 ```bash
-holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
+holodeck refresh path/to/deck.blend dist --title "My Deck"
 ```
 
 `refresh` reads the Blend file metadata, verifies that the expected rendered
@@ -128,9 +128,9 @@ Use `render-frames` with `--frames` when only a few frame images need to be
 re-rendered:
 
 ```bash
-holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96"
-holodeck render-frames path/to/deck.blend dist/deck --render-engine workbench
-holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
+holodeck render-frames path/to/deck.blend dist --frames "48,72-96"
+holodeck render-frames path/to/deck.blend dist --render-engine workbench
+holodeck refresh path/to/deck.blend dist --title "My Deck"
 ```
 
 Frame ranges are inclusive, and comma-separated segments are allowed. For
@@ -155,7 +155,7 @@ For S3, sync the output directory to a bucket configured for static website
 hosting or serve it through CloudFront:
 
 ```bash
-aws s3 sync dist/deck s3://your-bucket/path/
+aws s3 sync dist s3://your-bucket/path/
 ```
 
 The player uses relative asset paths, so the same output can be served from a
@@ -173,14 +173,14 @@ Workbench rendering is useful when you want fast feedback on timing, camera
 motion, and animation. You can render the whole deck with Workbench first:
 
 ```bash
-holodeck build path/to/deck.blend dist/deck --render-engine workbench
+holodeck build path/to/deck.blend dist --render-engine workbench
 ```
 
 After the timing feels right, you can re-render selected frames or ranges with a
 final engine. This is useful when only part of the deck needs more visual polish:
 
 ```bash
-holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96" --render-engine cycles
+holodeck render-frames path/to/deck.blend dist --frames "48,72-96" --render-engine cycles
 ```
 
 You can also omit `--render-engine` during the final pass if the `.blend` file
