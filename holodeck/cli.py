@@ -20,6 +20,7 @@ from .core import (
     write_markers_only_manifest_from_frames,
 )
 from .core.frame_spec import parse_frame_spec
+from .core.render_settings import RENDER_ENGINE_CHOICES
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -221,6 +222,11 @@ def _add_render_arguments(parser: argparse.ArgumentParser) -> None:
         default=100,
         help="Resolution percentage override for rendering. 100 keeps the blend resolution, 50 halves it, 200 doubles it.",
     )
+    parser.add_argument(
+        "--render-engine",
+        choices=RENDER_ENGINE_CHOICES,
+        help="Override the blend file render engine for rendering.",
+    )
 
 
 def _add_player_arguments(parser: argparse.ArgumentParser) -> None:
@@ -261,6 +267,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
         blender_executable=args.blender,
         scene=args.scene,
         res_pct=args.res_pct,
+        render_engine=getattr(args, "render_engine", None),
         frames=getattr(args, "frames", None),
         markers_only=getattr(args, "markers_only", False),
     )

@@ -22,6 +22,7 @@ class TestCliHelp:
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
         assert "--res-pct RES_PCT" in captured.out
+        assert "--render-engine {eevee,cycles,workbench}" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--title TITLE" in captured.out
         assert "--port PORT" in captured.out
@@ -43,6 +44,7 @@ class TestCliHelp:
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
         assert "--res-pct RES_PCT" in captured.out
+        assert "--render-engine {eevee,cycles,workbench}" in captured.out
         assert "--scene SCENE" in captured.out
         assert "--title TITLE" in captured.out
         assert "--port PORT" in captured.out
@@ -140,6 +142,46 @@ class TestRenderFramesCommand:
         assert exit_code == 0
         assert calls[0]["frames"] is None
         assert calls[0]["markers_only"] is False
+        assert calls[0]["render_engine"] is None
+
+    def test_passes_render_engine_option_through_to_render(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
+        monkeypatch.setattr(
+            "holodeck.cli.render_blend",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        exit_code = main(
+            ["render-frames", str(blend_file), str(output_dir), "--render-engine", "eevee"]
+        )
+
+        assert exit_code == 0
+        assert calls[0]["render_engine"] == "eevee"
+
+    def test_rejects_invalid_render_engine(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "render-frames",
+                    str(blend_file),
+                    str(output_dir),
+                    "--render-engine",
+                    "internal",
+                ]
+            )
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "invalid choice" in captured.err
 
     def test_passes_markers_only_option_through_to_render(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
@@ -377,6 +419,25 @@ class TestBuildCommand:
 
         assert exit_code == 0
         assert calls == [("render", "Demo Deck"), ("manifest", "Demo Deck")]
+
+    def test_propagates_render_engine_to_render_and_refresh(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        output_dir = tmp_path / "dist"
+        calls = []
+
+        monkeypatch.setattr(
+            "holodeck.cli.render_frames_command",
+            lambda args: calls.append(("render", args.render_engine)) or 0,
+        )
+        monkeypatch.setattr(
+            "holodeck.cli.refresh_command",
+            lambda args: calls.append(("manifest", args.render_engine)) or 0,
+        )
+
+        exit_code = main(["build", str(blend_file), str(output_dir), "--render-engine", "cycles"])
+
+        assert exit_code == 0
+        assert calls == [("render", "cycles"), ("manifest", "cycles")]
 
 
 class TestServeCommand:

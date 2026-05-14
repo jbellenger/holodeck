@@ -47,6 +47,8 @@ class CancelledActionError extends Error {
   let advanceHintShown = false;
   let advanceHintHideAt = 0;
   let advanceHintTimeout = null;
+  let screenWakeLock = null;
+  let screenWakeLockRequest = null;
   const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
   const warmedFrames = new Array(frameUrls.length).fill(false);
   const frameWarmPromises = new Array(frameUrls.length).fill(null);
@@ -119,15 +121,18 @@ class CancelledActionError extends Error {
   function handleVisibilityChange() {
     if (advanceHintShown && Date.now() >= advanceHintHideAt) {
       dismissAdvanceHint();
-      return;
-    }
-
-    if (advanceHintShown) {
+    } else if (advanceHintShown) {
       scheduleAdvanceHintTimeout();
+    } else {
+      showAdvanceHintWhenVisible();
+    }
+
+    if (document.hidden) {
+      void releaseScreenWakeLock();
       return;
     }
 
-    showAdvanceHintWhenVisible();
+    void requestScreenWakeLock();
   }
 
   function showPlaybackIndicator() {
@@ -656,6 +661,65 @@ class CancelledActionError extends Error {
     return currentFrameWidth > currentFrameHeight;
   }
 
+  function canRequestScreenWakeLock() {
+    return (
+      "wakeLock" in navigator &&
+      navigator.wakeLock &&
+      typeof navigator.wakeLock.request === "function"
+    );
+  }
+
+  function shouldKeepScreenAwake() {
+    return document.fullscreenElement && !document.hidden;
+  }
+
+  async function requestScreenWakeLock() {
+    if (
+      !canRequestScreenWakeLock() ||
+      !shouldKeepScreenAwake() ||
+      screenWakeLock ||
+      screenWakeLockRequest
+    ) {
+      return;
+    }
+
+    try {
+      screenWakeLockRequest = navigator.wakeLock.request("screen");
+      const wakeLock = await screenWakeLockRequest;
+      wakeLock.addEventListener("release", () => {
+        if (screenWakeLock === wakeLock) {
+          screenWakeLock = null;
+        }
+      });
+
+      if (!shouldKeepScreenAwake()) {
+        await wakeLock.release();
+        return;
+      }
+
+      screenWakeLock = wakeLock;
+    } catch (error) {
+      console.error(error);
+    } finally {
+      screenWakeLockRequest = null;
+    }
+  }
+
+  async function releaseScreenWakeLock() {
+    if (!screenWakeLock) {
+      return;
+    }
+
+    const wakeLock = screenWakeLock;
+    screenWakeLock = null;
+
+    try {
+      await wakeLock.release();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
   async function enableFullscreen({ preferLandscape = false } = {}) {
     if (!container.requestFullscreen || document.fullscreenElement) {
       return;
@@ -663,6 +727,7 @@ class CancelledActionError extends Error {
 
     try {
       await container.requestFullscreen();
+      void requestScreenWakeLock();
       if (preferLandscape && isWideImage()) {
         await tryLockLandscapeOrientation();
       }
@@ -691,6 +756,16 @@ class CancelledActionError extends Error {
     }
 
     void enableFullscreen();
+  }
+
+  function handleFullscreenChange() {
+    queueCurrentFrameRedraw();
+
+    if (document.fullscreenElement) {
+      void requestScreenWakeLock();
+    } else {
+      void releaseScreenWakeLock();
+    }
   }
 
   function handleTouchAction(clientX) {
@@ -859,7 +934,7 @@ class CancelledActionError extends Error {
   });
 
   addEventListener("resize", queueCurrentFrameRedraw);
-  document.addEventListener("fullscreenchange", queueCurrentFrameRedraw);
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
   document.addEventListener("visibilitychange", handleVisibilityChange);
 
   container.addEventListener("touchstart", dismissAdvanceHint, { passive: true, capture: true });

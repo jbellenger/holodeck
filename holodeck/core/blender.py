@@ -9,6 +9,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .render_settings import RENDER_ENGINE_CHOICES
 from .runtime import get_package_path, get_package_root
 
 
@@ -87,16 +88,22 @@ def render_blend(
     blender_executable: str = "blender",
     scene: str | None = None,
     res_pct: int = 100,
+    render_engine: str | None = None,
     frames: str | None = None,
     markers_only: bool = False,
 ) -> None:
     """Render frames for a blend file into the output directory."""
     if frames and markers_only:
         raise ValueError("Cannot combine 'frames' and 'markers_only'.")
+    if render_engine is not None and render_engine not in RENDER_ENGINE_CHOICES:
+        choices = ", ".join(RENDER_ENGINE_CHOICES)
+        raise ValueError(f"Render engine must be one of: {choices}.")
 
     script_args = ["--output", str(output_dir), "--res-pct", str(res_pct)]
     if scene:
         script_args.extend(["--scene", scene])
+    if render_engine:
+        script_args.extend(["--render-engine", render_engine])
     if frames:
         script_args.extend(["--frames", frames])
     if markers_only:

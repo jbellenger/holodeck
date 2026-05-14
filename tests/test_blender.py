@@ -154,6 +154,40 @@ class TestRenderBlend:
             "--markers-only",
         ]
 
+    def test_forwards_render_engine_option(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        captured = {}
+
+        def fake_run_blender_script(**kwargs):
+            captured.update(kwargs)
+
+        monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
+
+        render_blend(blend_file=blend_file, output_dir=output_dir, render_engine="cycles")
+
+        assert captured["script_args"] == [
+            "--output",
+            str(output_dir),
+            "--res-pct",
+            "100",
+            "--render-engine",
+            "cycles",
+        ]
+
+    def test_rejects_unknown_render_engine(self, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(ValueError, match="Render engine"):
+            render_blend(
+                blend_file=blend_file,
+                output_dir=output_dir,
+                render_engine="internal",
+            )
+
     def test_rejects_combining_frames_and_markers_only(self, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()

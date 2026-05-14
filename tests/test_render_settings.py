@@ -15,6 +15,7 @@ class _FakeImageSettings:
 
 class _FakeRender:
     def __init__(self):
+        self.engine = "CYCLES"
         self.filepath = ""
         self.use_file_extension = False
         self.resolution_percentage = 42
@@ -64,6 +65,22 @@ class _VideoRender(_FakeRender):
         self.image_settings = _VideoImageSettings()
 
 
+class _LegacyEeveeRender(_FakeRender):
+    def __init__(self):
+        super().__init__()
+        self._engine = "CYCLES"
+
+    @property
+    def engine(self):
+        return self._engine
+
+    @engine.setter
+    def engine(self, value):
+        if value == "BLENDER_EEVEE_NEXT":
+            raise TypeError("enum not found")
+        self._engine = value
+
+
 class _RejectingScene:
     def __init__(self):
         self.render = _RejectingRender()
@@ -72,6 +89,11 @@ class _RejectingScene:
 class _VideoScene:
     def __init__(self):
         self.render = _VideoRender()
+
+
+class _LegacyEeveeScene:
+    def __init__(self):
+        self.render = _LegacyEeveeRender()
 
 
 class TestConfigureSceneForHolodeckRender:
@@ -86,6 +108,13 @@ class TestConfigureSceneForHolodeckRender:
         assert scene.render.resolution_percentage == DEFAULT_RESOLUTION_PERCENTAGE
         assert scene.render.image_settings.file_format == HOLODECK_RENDER_FILE_FORMAT
 
+    def test_keeps_blend_render_engine_by_default(self, tmp_path):
+        scene = _FakeScene()
+
+        configure_scene_for_holodeck_render(scene, tmp_path / "render")
+
+        assert scene.render.engine == "CYCLES"
+
     def test_overrides_resolution_percentage(self, tmp_path):
         scene = _FakeScene()
 
@@ -96,6 +125,38 @@ class TestConfigureSceneForHolodeckRender:
         )
 
         assert scene.render.resolution_percentage == 50
+
+    def test_overrides_render_engine(self, tmp_path):
+        scene = _FakeScene()
+
+        configure_scene_for_holodeck_render(
+            scene,
+            tmp_path / "render",
+            render_engine="workbench",
+        )
+
+        assert scene.render.engine == "BLENDER_WORKBENCH"
+
+    def test_supports_legacy_eevee_engine_id(self, tmp_path):
+        scene = _LegacyEeveeScene()
+
+        configure_scene_for_holodeck_render(
+            scene,
+            tmp_path / "render",
+            render_engine="eevee",
+        )
+
+        assert scene.render.engine == "BLENDER_EEVEE"
+
+    def test_rejects_unknown_render_engine(self, tmp_path):
+        scene = _FakeScene()
+
+        with pytest.raises(ValueError, match="Render engine"):
+            configure_scene_for_holodeck_render(
+                scene,
+                tmp_path / "render",
+                render_engine="internal",
+            )
 
     def test_converts_video_output_to_image_sequence_before_setting_avif(self, tmp_path):
         scene = _VideoScene()

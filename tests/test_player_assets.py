@@ -53,6 +53,11 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert 'document.getElementById("canvas")' in player_js
     assert 'document.getElementById("advance-hint")' in player_js
     assert "requestFullscreen" in player_js
+    assert 'navigator.wakeLock.request("screen")' in player_js
+    assert "function requestScreenWakeLock()" in player_js
+    assert "function releaseScreenWakeLock()" in player_js
+    assert "function handleFullscreenChange()" in player_js
+    assert 'document.addEventListener("fullscreenchange", handleFullscreenChange);' in player_js
     assert 'screen.orientation.lock("landscape")' in player_js
     assert "screen.orientation.unlock();" in player_js
     assert 'container.addEventListener("touchstart"' in player_js
@@ -85,6 +90,8 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert "Tap to advance" in player_js
     assert "document.hidden" in player_js
     assert 'document.addEventListener("visibilitychange", handleVisibilityChange);' in player_js
+    assert "void requestScreenWakeLock();" in player_js
+    assert "void releaseScreenWakeLock();" in player_js
     assert 'addEventListener("keydown", dismissAdvanceHint, { capture: true });' in player_js
     assert 'addEventListener("keyup", dismissAdvanceHint' not in player_js
     assert 'container.addEventListener("touchstart", dismissAdvanceHint' in player_js

@@ -7,7 +7,10 @@ from pathlib import Path
 import bpy
 
 from holodeck.core.frame_spec import parse_frame_spec
-from holodeck.core.render_settings import configure_scene_for_holodeck_render
+from holodeck.core.render_settings import (
+    RENDER_ENGINE_CHOICES,
+    configure_scene_for_holodeck_render,
+)
 
 
 def parse_args(argv):
@@ -26,6 +29,11 @@ def parse_args(argv):
         type=int,
         default=100,
         help="Resolution percentage override for rendering.",
+    )
+    parser.add_argument(
+        "--render-engine",
+        choices=RENDER_ENGINE_CHOICES,
+        help="Optional render engine override.",
     )
     parser.add_argument(
         "--frames",
@@ -53,6 +61,7 @@ def main(argv):
         scene,
         render_dir,
         resolution_percentage=args.res_pct,
+        render_engine=args.render_engine,
     )
 
     if args.frames and args.markers_only:

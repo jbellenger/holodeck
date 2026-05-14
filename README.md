@@ -70,11 +70,13 @@ Useful build options:
 ```bash
 ./dist/holodeck build path/to/deck.blend dist/deck --scene "Scene"
 ./dist/holodeck build path/to/deck.blend dist/deck --res-pct 50
+./dist/holodeck build path/to/deck.blend dist/deck --render-engine cycles
 ./dist/holodeck build path/to/deck.blend dist/deck --markers-only
 ```
 
 - `--scene` renders a specific Blender scene instead of the active scene.
 - `--res-pct` overrides Blender's render resolution percentage.
+- `--render-engine` overrides the Blend file render engine with `eevee`, `cycles`, or `workbench`.
 - `--markers-only` renders only marker frames and writes a marker-only manifest.
 - `--title` sets the generated player page title.
 
@@ -123,6 +125,7 @@ re-rendered:
 
 ```bash
 ./dist/holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96"
+./dist/holodeck render-frames path/to/deck.blend dist/deck --render-engine workbench
 ./dist/holodeck refresh path/to/deck.blend dist/deck --title "My Deck"
 ```
 
@@ -135,9 +138,9 @@ new Blend metadata or rendered frame fingerprints.
 
 ### 7. Deploy Your Holodeck
 
-A built Holodeck output directory is a static site. Upload the contents of the
-output directory to any static host, such as GitHub Pages, S3, CloudFront,
-Netlify, or Cloudflare Pages.
+A built Holodeck output directory is a static site and can be uploaded to any
+static site host, such as GitHub Pages, S3, CloudFront, Netlify, or Cloudflare
+Pages.
 
 For GitHub Pages, publish the output directory as your Pages artifact or copy it
 to the branch or directory configured for Pages. If you publish from a directory
@@ -153,3 +156,28 @@ aws s3 sync dist/deck s3://your-bucket/path/
 
 The player uses relative asset paths, so the same output can be served from a
 domain root or a subdirectory.
+
+
+# Tips And Tricks
+## workbench rendering
+The `--render-engine` option override lets you render with a different engine
+without changing the saved setting in the `.blend` file. If you do not pass
+`--render-engine`, Holodeck uses the render engine that is already configured in
+the file.
+
+Workbench rendering is useful when you want fast feedback on timing, camera
+motion, and animation. You can render the whole deck with Workbench first:
+
+```bash
+./dist/holodeck build path/to/deck.blend dist/deck --render-engine workbench
+```
+
+After the timing feels right, you can re-render selected frames or ranges with a
+final engine. This is useful when only part of the deck needs more visual polish:
+
+```bash
+./dist/holodeck render-frames path/to/deck.blend dist/deck --frames "48,72-96" --render-engine cycles
+```
+
+You can also omit `--render-engine` during the final pass if the `.blend` file
+already has the final engine selected.
