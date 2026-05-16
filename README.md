@@ -12,7 +12,7 @@ supported in all browsers.
 
 Gallery: 
 - [the demo in this repository](https://jbellenger.github.io/holodeck/)
-- [Brute Force Correctness (GraphQLConf 2026)](http://graphqlconf-26.s3-website-us-west-2.amazonaws.com/)
+- [Brute Force Correctness (GraphQLConf 2026)](https://bfc.bellenger.org/)
 
 ## Quickstart
 
