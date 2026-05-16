@@ -93,8 +93,16 @@ def render_blend(
     markers_only: bool = False,
 ) -> None:
     """Render frames for a blend file into the output directory."""
-    if frames and markers_only:
-        raise ValueError("Cannot combine 'frames' and 'markers_only'.")
+    selected_frame_modes = [
+        mode
+        for mode, enabled in (
+            ("frames", bool(frames)),
+            ("markers_only", markers_only),
+        )
+        if enabled
+    ]
+    if len(selected_frame_modes) > 1:
+        raise ValueError(f"Cannot combine frame selection modes: {', '.join(selected_frame_modes)}.")
     if render_engine is not None and render_engine not in RENDER_ENGINE_CHOICES:
         choices = ", ".join(RENDER_ENGINE_CHOICES)
         raise ValueError(f"Render engine must be one of: {choices}.")

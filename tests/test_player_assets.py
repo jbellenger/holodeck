@@ -38,11 +38,12 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert '<div id="advance-hint" hidden></div>' in index_html
     assert '<div id="playback-indicator" aria-hidden="true" hidden></div>' in index_html
     assert 'const loadingIndicatorDelayMillis = 32;' in player_js
-    assert 'const optimisticPreloadSegmentCount = 2;' in player_js
+    assert 'const frameCacheWarmConcurrency = 3;' in player_js
+    assert 'const aggressiveFrameCacheLimit = 5000;' in player_js
     assert 'const swipeThresholdPixels = 48;' in player_js
-    assert 'const decodedFrameBufferAhead = 6;' in player_js
+    assert 'const decodedFrameBufferAhead = 18;' in player_js
     assert 'const decodedFrameBufferBehind = 1;' in player_js
-    assert 'const decodedFrameConcurrency = 3;' in player_js
+    assert 'const decodedFrameConcurrency = 4;' in player_js
     assert 'const playbackIndicatorSize = 2;' in player_js
     assert 'const advanceHintDurationMillis = 5000;' in player_js
     assert 'case "ArrowDown":' in player_js
@@ -68,18 +69,29 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert "handleTouchGesture(event.changedTouches[0])" in player_js
     assert "function advancePlayback()" in player_js
     assert "function togglePlayback()" not in player_js
-    assert "if (!ready || playing)" in player_js
+    assert "if (!ready || (playing && playbackLoopActive))" in player_js
     assert "jump(-1);" in player_js
-    assert "scheduleOptimisticPreload" in player_js
+    assert "scheduleFrameCacheWarm" in player_js
     assert "scheduleDecodedBuffer" in player_js
     assert 'const warmedBlob = await warmFrame(frameIndex);' in player_js
+    assert "const warmedFrameBlobs = new Array(frameUrls.length).fill(null);" in player_js
+    assert "async function warmFrame(frameIndex, { retainBlob = true } = {})" in player_js
+    assert "warmFrame(frameIndex, { retainBlob: false });" in player_js
+    assert "warmedFrameBlobs[frameIndex] = null;" in player_js
+    assert "const decodedFrame = await decodedFramePromises.get(frameIndex);" in player_js
     assert 'const workerCount = Math.min(decodedFrameConcurrency, pendingFrames.length);' in player_js
+    assert "let decodedBufferScheduled = false;" in player_js
+    assert "while (decodedBufferRequest)" in player_js
+    assert "let playbackLoopActive = false;" in player_js
+    assert "lastPlaybackTimestamp = timestamp;" in player_js
+    assert "let playbackUnderrun = false;" in player_js
+    assert "scheduleDecodedBuffer(currentFrame, { actionId });" in player_js
+    assert "runBackground(runFrameCacheWarmQueue, { fatal: false });" in player_js
     assert "touch-action: manipulation;" in styles_css
     assert 'document.getElementById("playback-indicator")' in player_js
     assert "updatePlaybackIndicatorPosition(dx, dy, drawWidth, drawHeight);" in player_js
-    assert "canvas.getBoundingClientRect()" in player_js
-    assert "playbackIndicator.style.left" in player_js
-    assert "playbackIndicator.style.top" in player_js
+    assert "canvasCssWidth / canvas.width" in player_js
+    assert "playbackIndicator.style.transform" in player_js
     assert "showPlaybackIndicator();" in player_js
     assert "hidePlaybackIndicator();" in player_js
     assert "#playback-indicator" in styles_css

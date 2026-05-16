@@ -278,6 +278,7 @@ class TestRefreshCommand:
         render_dir.mkdir(parents=True)
         (render_dir / "0001.png").write_bytes(b"frame-1")
         (render_dir / "0003.png").write_bytes(b"frame-3")
+        (render_dir / "0004.png").write_bytes(b"frame-4")
 
         monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
         monkeypatch.setattr(
@@ -285,12 +286,13 @@ class TestRefreshCommand:
             lambda **kwargs: BlendMetadata(
                 fps=24,
                 frame_start=1,
-                frame_end=3,
+                frame_end=4,
                 marker_frames=[1, 3],
                 frame_paths=[
                     str(render_dir / "0001.png"),
                     str(render_dir / "0002.png"),
                     str(render_dir / "0003.png"),
+                    str(render_dir / "0004.png"),
                 ],
             ),
         )
@@ -299,8 +301,8 @@ class TestRefreshCommand:
 
         assert exit_code == 0
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["frames"] == ["render/0001.png", "render/0003.png"]
-        assert manifest["markers"] == [0, 1]
+        assert manifest["frames"] == ["render/0001.png", "render/0003.png", "render/0004.png"]
+        assert manifest["markers"] == [0, 1, 2]
 
     def test_markers_only_fails_when_marker_frames_missing(self, monkeypatch, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -316,12 +318,13 @@ class TestRefreshCommand:
             lambda **kwargs: BlendMetadata(
                 fps=24,
                 frame_start=1,
-                frame_end=3,
+                frame_end=4,
                 marker_frames=[1, 3],
                 frame_paths=[
                     str(render_dir / "0001.png"),
                     str(render_dir / "0002.png"),
                     str(render_dir / "0003.png"),
+                    str(render_dir / "0004.png"),
                 ],
             ),
         )
@@ -330,7 +333,7 @@ class TestRefreshCommand:
 
         captured = capsys.readouterr()
         assert exit_code == 1
-        assert "Missing 2 rendered frame(s)" in captured.err
+        assert "Missing 3 rendered frame(s)" in captured.err
 
     def test_fails_when_expected_frames_are_missing(self, monkeypatch, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"

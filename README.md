@@ -81,7 +81,7 @@ holodeck build path/to/deck.blend dist --markers-only
 - `--scene` renders a specific Blender scene instead of the active scene.
 - `--res-pct` overrides Blender's render resolution percentage.
 - `--render-engine` overrides the Blend file render engine with `eevee`, `cycles`, or `workbench`.
-- `--markers-only` renders only marker frames and writes a marker-only manifest.
+- `--markers-only` renders marker frames plus the scene end frame and writes a marker-only manifest.
 - `--title` sets the generated player page title.
 
 ### 4. Play Your Holodeck Locally
@@ -122,25 +122,7 @@ holodeck refresh path/to/deck.blend dist --title "My Deck"
 frames exist, rewrites `manifest.json`, and reinstalls the browser player assets.
 If the actual frame images changed, use `build` or `render-frames` instead.
 
-### 6. Render a Subset of Frames
-
-Use `render-frames` with `--frames` when only a few frame images need to be
-re-rendered:
-
-```bash
-holodeck render-frames path/to/deck.blend dist --frames "48,72-96"
-holodeck render-frames path/to/deck.blend dist --render-engine workbench
-holodeck refresh path/to/deck.blend dist --title "My Deck"
-```
-
-Frame ranges are inclusive, and comma-separated segments are allowed. For
-example, `"4"`, `"4-10"`, and `"1,2,3,20-24"` are all valid frame specs.
-
-`render-frames` updates files under `render/`, but it does not update
-`manifest.json`, so run `refresh` afterwards when the manifest should reflect
-new Blend metadata or rendered frame fingerprints.
-
-### 7. Deploy Your Holodeck
+### 6. Deploy Your Holodeck
 
 A built Holodeck output directory is a static site and can be uploaded to any
 static site host, such as GitHub Pages, S3, CloudFront, Netlify, or Cloudflare
@@ -155,14 +137,38 @@ For S3, sync the output directory to a bucket configured for static website
 hosting or serve it through CloudFront:
 
 ```bash
-aws s3 sync dist s3://your-bucket/path/
+aws s3 sync dist s3://your-bucket/path/ \
+  --exclude "*" \
+  --include "render/*" \
+  --cache-control "public, max-age=31536000, immutable"
+
+aws s3 sync dist s3://your-bucket/path/ \
+  --exclude "render/*" \
+  --cache-control "no-cache"
 ```
 
 The player uses relative asset paths, so the same output can be served from a
-domain root or a subdirectory.
+domain root or a subdirectory. Frame URLs include a manifest token, so rendered
+frames can be cached aggressively while `manifest.json` and player assets stay
+fresh.
 
 
 # Tips And Tricks
+## Render A Subset Of Frames
+Use `render-frames` with `--frames` when only a few frame images need to be
+re-rendered:
+
+```bash
+holodeck render-frames path/to/deck.blend dist --frames "48,72-96"
+```
+
+Frame ranges are inclusive, and comma-separated segments are allowed. For
+example, `"4"`, `"4-10"`, and `"1,2,3,20-24"` are all valid frame specs.
+
+`render-frames` updates files under `render/`, but it does not update
+`manifest.json`. Use it for small visual changes when the timing, markers, and
+scene length have not changed.
+
 ## workbench rendering
 The `--render-engine` option override lets you render with a different engine
 without changing the saved setting in the `.blend` file. If you do not pass

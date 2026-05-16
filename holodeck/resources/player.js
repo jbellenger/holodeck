@@ -1,10 +1,10 @@
-const preloadConcurrency = 6;
 const loadingIndicatorDelayMillis = 32;
-const optimisticPreloadSegmentCount = 2;
+const frameCacheWarmConcurrency = 3;
+const aggressiveFrameCacheLimit = 5000;
 const swipeThresholdPixels = 48;
-const decodedFrameBufferAhead = 6;
+const decodedFrameBufferAhead = 18;
 const decodedFrameBufferBehind = 1;
-const decodedFrameConcurrency = 3;
+const decodedFrameConcurrency = 4;
 const playbackIndicatorSize = 2;
 const advanceHintDurationMillis = 5000;
 
@@ -43,17 +43,29 @@ class CancelledActionError extends Error {
   let pendingLoadingState = null;
   let touchStartPoint = null;
   let resizeQueued = false;
+  let canvasSizeDirty = true;
+  let canvasCssWidth = 0;
+  let canvasCssHeight = 0;
+  let canvasPixelRatio = 0;
   let advanceHintDismissed = false;
   let advanceHintShown = false;
   let advanceHintHideAt = 0;
   let advanceHintTimeout = null;
   let screenWakeLock = null;
   let screenWakeLockRequest = null;
+  let playbackLoopActive = false;
+  let decodedBufferScheduled = false;
+  let decodedBufferRequest = null;
+  let frameCacheWarmRunning = false;
+  let allFramesCacheWarmQueued = false;
   const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
   const warmedFrames = new Array(frameUrls.length).fill(false);
+  const warmedFrameBlobs = new Array(frameUrls.length).fill(null);
   const frameWarmPromises = new Array(frameUrls.length).fill(null);
   const decodedFrames = new Map();
   const decodedFramePromises = new Map();
+  const frameCacheWarmQueue = [];
+  const frameCacheWarmQueued = new Set();
 
   function announceStatus(messageText) {
     status.textContent = messageText;
@@ -144,15 +156,14 @@ class CancelledActionError extends Error {
   }
 
   function updatePlaybackIndicatorPosition(frameX, frameY, frameWidth, frameHeight) {
-    const canvasRect = canvas.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const cssScaleX = canvasRect.width / canvas.width;
-    const cssScaleY = canvasRect.height / canvas.height;
-    const frameRight = canvasRect.left - containerRect.left + (frameX + frameWidth) * cssScaleX;
-    const frameBottom = canvasRect.top - containerRect.top + (frameY + frameHeight) * cssScaleY;
+    const cssScaleX = canvasCssWidth / canvas.width;
+    const cssScaleY = canvasCssHeight / canvas.height;
+    const frameRight = (frameX + frameWidth) * cssScaleX;
+    const frameBottom = (frameY + frameHeight) * cssScaleY;
+    const indicatorX = Math.max(0, frameRight - playbackIndicatorSize);
+    const indicatorY = Math.max(0, frameBottom - playbackIndicatorSize);
 
-    playbackIndicator.style.left = `${Math.max(0, frameRight - playbackIndicatorSize)}px`;
-    playbackIndicator.style.top = `${Math.max(0, frameBottom - playbackIndicatorSize)}px`;
+    playbackIndicator.style.transform = `translate3d(${indicatorX}px, ${indicatorY}px, 0)`;
   }
 
   function renderLoadingProgress(completed = null, total = null) {
@@ -213,20 +224,55 @@ class CancelledActionError extends Error {
   }
 
   function resizeCanvas() {
-    const pixelRatio = window.devicePixelRatio || 1;
-    const width = Math.max(1, Math.round(container.clientWidth * pixelRatio));
-    const height = Math.max(1, Math.round(container.clientHeight * pixelRatio));
+    canvasPixelRatio = window.devicePixelRatio || 1;
+    canvasCssWidth = Math.max(1, container.clientWidth);
+    canvasCssHeight = Math.max(1, container.clientHeight);
+
+    const width = Math.max(1, Math.round(canvasCssWidth * canvasPixelRatio));
+    const height = Math.max(1, Math.round(canvasCssHeight * canvasPixelRatio));
 
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
     }
+
+    canvasSizeDirty = false;
+  }
+
+  function ensureCanvasSize() {
+    if (canvasSizeDirty || canvasPixelRatio !== (window.devicePixelRatio || 1)) {
+      resizeCanvas();
+    }
+  }
+
+  function fillFrameBackdrop(frameX, frameY, frameWidth, frameHeight) {
+    const frameRight = frameX + frameWidth;
+    const frameBottom = frameY + frameHeight;
+    const coversCanvas =
+      frameX <= 0 &&
+      frameY <= 0 &&
+      frameRight >= canvas.width &&
+      frameBottom >= canvas.height;
+
+    if (coversCanvas) {
+      return;
+    }
+
+    context.fillStyle = "#000";
+
+    if (frameY > 0) {
+      context.fillRect(0, 0, canvas.width, frameY);
+      context.fillRect(0, frameBottom, canvas.width, canvas.height - frameBottom);
+    }
+
+    if (frameX > 0) {
+      context.fillRect(0, frameY, frameX, frameHeight);
+      context.fillRect(frameRight, frameY, canvas.width - frameRight, frameHeight);
+    }
   }
 
   function drawFrame(source, width, height) {
-    resizeCanvas();
-    context.fillStyle = "#000";
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    ensureCanvasSize();
 
     const scale = Math.min(canvas.width / width, canvas.height / height);
     const drawWidth = width * scale;
@@ -234,6 +280,7 @@ class CancelledActionError extends Error {
     const dx = (canvas.width - drawWidth) / 2;
     const dy = (canvas.height - drawHeight) / 2;
 
+    fillFrameBackdrop(dx, dy, drawWidth, drawHeight);
     context.drawImage(source, dx, dy, drawWidth, drawHeight);
     updatePlaybackIndicatorPosition(dx, dy, drawWidth, drawHeight);
   }
@@ -289,31 +336,46 @@ class CancelledActionError extends Error {
     };
   }
 
-  function getPreloadSegmentStarts(frame, segmentCountAhead = optimisticPreloadSegmentCount) {
-    if (frameUrls.length === 0) {
-      return [];
+  function getFrameCacheWarmOrder(frame) {
+    const clampedFrame = Math.max(0, Math.min(frame, frameUrls.length - 1));
+    const orderedFrames = [];
+
+    for (let frameIndex = clampedFrame; frameIndex < frameUrls.length; frameIndex += 1) {
+      orderedFrames.push(frameIndex);
     }
 
-    const starts = [Math.max(0, Math.min(frame, frameUrls.length - 1))];
-
-    while (starts.length <= segmentCountAhead) {
-      const nextStart = getSegmentEnd(starts[starts.length - 1]);
-      if (nextStart <= starts[starts.length - 1]) {
-        break;
-      }
-
-      starts.push(nextStart);
-      if (nextStart === frameUrls.length - 1) {
-        break;
-      }
+    for (let frameIndex = 0; frameIndex < clampedFrame; frameIndex += 1) {
+      orderedFrames.push(frameIndex);
     }
 
-    return starts;
+    return orderedFrames;
   }
 
-  async function warmFrame(frameIndex) {
+  function getFrameWindow(frame, frameCount) {
+    const startFrame = Math.max(0, Math.min(frame, frameUrls.length - 1));
+    const endFrame = Math.min(frameUrls.length - 1, startFrame + frameCount - 1);
+    const frameWindow = [];
+
+    for (let frameIndex = startFrame; frameIndex <= endFrame; frameIndex += 1) {
+      frameWindow.push(frameIndex);
+    }
+
+    return frameWindow;
+  }
+
+  async function warmFrame(frameIndex, { retainBlob = true } = {}) {
+    if (retainBlob && warmedFrameBlobs[frameIndex]) {
+      return warmedFrameBlobs[frameIndex];
+    }
+
     if (frameWarmPromises[frameIndex]) {
-      return frameWarmPromises[frameIndex];
+      const blob = await frameWarmPromises[frameIndex];
+      if (retainBlob) {
+        warmedFrameBlobs[frameIndex] = blob;
+        return blob;
+      }
+
+      return null;
     }
 
     if (warmedFrames[frameIndex]) {
@@ -335,54 +397,105 @@ class CancelledActionError extends Error {
       frameWarmPromises[frameIndex] = null;
     });
 
-    return frameWarmPromises[frameIndex];
+    const blob = await frameWarmPromises[frameIndex];
+    if (retainBlob) {
+      warmedFrameBlobs[frameIndex] = blob;
+      return blob;
+    }
+
+    return null;
   }
 
-  async function warmSegment(frame, { actionId = null, showProgress = false, excludeFrame = null } = {}) {
-    assertActionIfProvided(actionId);
+  function moveQueuedFrameToFront(frameIndex, prioritizedFrames) {
+    const existingIndex = frameCacheWarmQueue.indexOf(frameIndex);
+    if (existingIndex === -1) {
+      return;
+    }
 
-    const { start, end } = getSegmentBounds(frame);
-    const pendingFrames = [];
+    frameCacheWarmQueue.splice(existingIndex, 1);
+    prioritizedFrames.push(frameIndex);
+  }
 
-    for (let frameIndex = start; frameIndex <= end; frameIndex += 1) {
-      if (frameIndex === excludeFrame) {
+  function queueFrameCacheWarm(frameIndexes, { front = false } = {}) {
+    const prioritizedFrames = [];
+
+    for (const frameIndex of frameIndexes) {
+      if (frameIndex < 0 || frameIndex >= frameUrls.length || warmedFrames[frameIndex]) {
         continue;
       }
 
-      if (!warmedFrames[frameIndex]) {
-        pendingFrames.push(frameIndex);
+      if (frameCacheWarmQueued.has(frameIndex)) {
+        if (front) {
+          moveQueuedFrameToFront(frameIndex, prioritizedFrames);
+        }
+        continue;
+      }
+
+      frameCacheWarmQueued.add(frameIndex);
+      if (front) {
+        prioritizedFrames.push(frameIndex);
+      } else {
+        frameCacheWarmQueue.push(frameIndex);
       }
     }
 
-    if (pendingFrames.length === 0) {
-      return { start, end };
+    if (prioritizedFrames.length > 0) {
+      frameCacheWarmQueue.unshift(...prioritizedFrames);
     }
 
-    let nextPendingIndex = 0;
-    let completed = 0;
-    if (showProgress) {
-      showLoadingProgress(completed, pendingFrames.length);
+    if (frameCacheWarmQueue.length > 0 && !frameCacheWarmRunning) {
+      runBackground(runFrameCacheWarmQueue, { fatal: false });
     }
+  }
+
+  async function runFrameCacheWarmQueue() {
+    if (frameCacheWarmRunning) {
+      return;
+    }
+
+    frameCacheWarmRunning = true;
 
     async function worker() {
-      while (nextPendingIndex < pendingFrames.length) {
-        assertActionIfProvided(actionId);
-        const pendingIndex = nextPendingIndex;
-        nextPendingIndex += 1;
-        const frameIndex = pendingFrames[pendingIndex];
-        await warmFrame(frameIndex);
-        assertActionIfProvided(actionId);
-        completed += 1;
-        if (showProgress) {
-          showLoadingProgress(completed, pendingFrames.length);
+      while (frameCacheWarmQueue.length > 0) {
+        const frameIndex = frameCacheWarmQueue.shift();
+        frameCacheWarmQueued.delete(frameIndex);
+
+        if (warmedFrames[frameIndex]) {
+          continue;
+        }
+
+        try {
+          await warmFrame(frameIndex, { retainBlob: false });
+        } catch (error) {
+          console.warn(error);
         }
       }
     }
 
-    const workerCount = Math.min(preloadConcurrency, pendingFrames.length);
-    await Promise.all(Array.from({ length: workerCount }, () => worker()));
-    assertActionIfProvided(actionId);
-    return { start, end };
+    try {
+      const workerCount = Math.min(frameCacheWarmConcurrency, frameCacheWarmQueue.length);
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    } finally {
+      frameCacheWarmRunning = false;
+      if (frameCacheWarmQueue.length > 0) {
+        runBackground(runFrameCacheWarmQueue, { fatal: false });
+      }
+    }
+  }
+
+  function scheduleFrameCacheWarm(frame) {
+    if (frameUrls.length === 0) {
+      return;
+    }
+
+    queueFrameCacheWarm(getFrameWindow(frame, decodedFrameBufferAhead * 4), { front: true });
+
+    if (allFramesCacheWarmQueued || frameUrls.length > aggressiveFrameCacheLimit) {
+      return;
+    }
+
+    allFramesCacheWarmQueued = true;
+    queueFrameCacheWarm(getFrameCacheWarmOrder(frame));
   }
 
   function releaseDecodedFrame(frameIndex) {
@@ -449,12 +562,13 @@ class CancelledActionError extends Error {
     }
 
     if (decodedFramePromises.has(frameIndex)) {
-      return decodedFramePromises.get(frameIndex);
+      const decodedFrame = await decodedFramePromises.get(frameIndex);
+      assertActionIfProvided(actionId);
+      return decodedFrame;
     }
 
     const decodePromise = (async () => {
       const warmedBlob = await warmFrame(frameIndex);
-      assertActionIfProvided(actionId);
 
       let blob = warmedBlob;
       if (!blob) {
@@ -464,18 +578,12 @@ class CancelledActionError extends Error {
         }
 
         blob = await response.blob();
+        warmedFrames[frameIndex] = true;
       }
-      assertActionIfProvided(actionId);
       const decodedFrame = await decodeBlob(blob);
 
-      try {
-        assertActionIfProvided(actionId);
-      } catch (error) {
-        decodedFrame.release();
-        throw error;
-      }
-
       decodedFrames.set(frameIndex, decodedFrame);
+      warmedFrameBlobs[frameIndex] = null;
       return decodedFrame;
     })();
 
@@ -486,7 +594,9 @@ class CancelledActionError extends Error {
       })
     );
 
-    return decodedFramePromises.get(frameIndex);
+    const decodedFrame = await decodedFramePromises.get(frameIndex);
+    assertActionIfProvided(actionId);
+    return decodedFrame;
   }
 
   async function fillDecodedBuffer(frame, { actionId = null } = {}) {
@@ -558,25 +668,35 @@ class CancelledActionError extends Error {
     return clampedFrame;
   }
 
-  async function warmOptimisticSegments(frame, { excludeFrame = null } = {}) {
-    const segmentStarts = getPreloadSegmentStarts(frame);
-
-    for (let index = 0; index < segmentStarts.length; index += 1) {
-      await warmSegment(segmentStarts[index], {
-        excludeFrame: index === 0 ? excludeFrame : null,
-      });
-    }
-  }
-
-  function scheduleOptimisticPreload(frame, { excludeFrame = null } = {}) {
-    runBackground(() => warmOptimisticSegments(frame, { excludeFrame }));
-  }
-
   function scheduleDecodedBuffer(frame, { actionId = null } = {}) {
-    runBackground(() => fillDecodedBuffer(frame, { actionId }));
+    decodedBufferRequest = { frame, actionId };
+
+    if (decodedBufferScheduled) {
+      return;
+    }
+
+    decodedBufferScheduled = true;
+    runBackground(async () => {
+      try {
+        while (decodedBufferRequest) {
+          const request = decodedBufferRequest;
+          decodedBufferRequest = null;
+          await fillDecodedBuffer(request.frame, { actionId: request.actionId });
+        }
+      } finally {
+        decodedBufferScheduled = false;
+        if (decodedBufferRequest) {
+          const request = decodedBufferRequest;
+          decodedBufferRequest = null;
+          scheduleDecodedBuffer(request.frame, { actionId: request.actionId });
+        }
+      }
+    });
   }
 
   function queueCurrentFrameRedraw() {
+    canvasSizeDirty = true;
+
     if (!ready || resizeQueued) {
       return;
     }
@@ -602,7 +722,7 @@ class CancelledActionError extends Error {
       }
 
       scheduleDecodedBuffer(clampedFrame, { actionId });
-      scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
+      scheduleFrameCacheWarm(clampedFrame);
     });
   }
 
@@ -630,7 +750,11 @@ class CancelledActionError extends Error {
 
   function advancePlayback() {
     if (playing) {
-      return;
+      if (playbackLoopActive) {
+        return;
+      }
+
+      playing = false;
     }
 
     playing = true;
@@ -769,8 +893,12 @@ class CancelledActionError extends Error {
   }
 
   function handleTouchAction(clientX) {
-    if (!ready || playing) {
+    if (!ready || (playing && playbackLoopActive)) {
       return;
+    }
+
+    if (playing) {
+      playing = false;
     }
 
     const bounds = container.getBoundingClientRect();
@@ -822,7 +950,7 @@ class CancelledActionError extends Error {
     showLoadingProgress();
     await fillDecodedBuffer(clampedFrame, { actionId });
     hideLoadingProgress();
-    scheduleOptimisticPreload(clampedFrame, { excludeFrame: clampedFrame });
+    scheduleFrameCacheWarm(clampedFrame);
 
     const segmentEnd = getSegmentEnd(clampedFrame);
     if (clampedFrame >= segmentEnd || clampedFrame === frameUrls.length - 1) {
@@ -830,43 +958,68 @@ class CancelledActionError extends Error {
       return;
     }
 
-    const startTimestamp = performance.now();
+    let lastPlaybackTimestamp = performance.now();
+    let playbackUnderrun = false;
 
     function loop(timestamp) {
-      if (!playing || !isActionActive(actionId)) {
-        hidePlaybackIndicator();
-        return;
-      }
-
-      const elapsedFrames = Math.floor((timestamp - startTimestamp) / frameMillis);
-      const targetFrame = Math.min(clampedFrame + elapsedFrames, segmentEnd, frameUrls.length - 1);
-
-      if (targetFrame > currentFrame) {
-        const decodedFrameIndex = getBestDecodedFrame(currentFrame + 1, targetFrame);
-        if (decodedFrameIndex !== null) {
-          const decodedFrame = decodedFrames.get(decodedFrameIndex);
-          drawFrame(decodedFrame.source, decodedFrame.width, decodedFrame.height);
-          currentFrame = decodedFrameIndex;
-          currentFrameWidth = decodedFrame.width;
-          currentFrameHeight = decodedFrame.height;
-          pruneDecodedFrames(decodedFrameIndex);
-          scheduleDecodedBuffer(decodedFrameIndex, { actionId });
+      try {
+        if (!playing || !isActionActive(actionId)) {
+          playbackLoopActive = false;
+          hidePlaybackIndicator();
+          return;
         }
-      }
 
-      const isLast = currentFrame === frameUrls.length - 1;
-      const isMarker = currentFrame !== clampedFrame && markerSet.has(currentFrame);
-      if (currentFrame >= segmentEnd || isLast || isMarker) {
-        playing = false;
+        const elapsedFrames = Math.floor((timestamp - lastPlaybackTimestamp) / frameMillis);
+        const targetFrame = Math.min(currentFrame + elapsedFrames, segmentEnd, frameUrls.length - 1);
+
+        if (targetFrame > currentFrame) {
+          const decodedFrameIndex = getBestDecodedFrame(currentFrame + 1, targetFrame);
+          if (decodedFrameIndex !== null) {
+            const advancedFrames = decodedFrameIndex - currentFrame;
+            const decodedFrame = decodedFrames.get(decodedFrameIndex);
+            drawFrame(decodedFrame.source, decodedFrame.width, decodedFrame.height);
+            currentFrame = decodedFrameIndex;
+            currentFrameWidth = decodedFrame.width;
+            currentFrameHeight = decodedFrame.height;
+            lastPlaybackTimestamp += advancedFrames * frameMillis;
+            if (playbackUnderrun) {
+              playbackUnderrun = false;
+              hideLoadingProgress();
+            }
+            pruneDecodedFrames(decodedFrameIndex);
+            scheduleDecodedBuffer(decodedFrameIndex, { actionId });
+            scheduleFrameCacheWarm(decodedFrameIndex);
+          } else {
+            if (!playbackUnderrun) {
+              playbackUnderrun = true;
+              showLoadingProgress();
+            }
+            scheduleDecodedBuffer(currentFrame, { actionId });
+            scheduleFrameCacheWarm(currentFrame);
+            lastPlaybackTimestamp = timestamp;
+          }
+        }
+
+        const isLast = currentFrame === frameUrls.length - 1;
+        const isMarker = currentFrame !== clampedFrame && markerSet.has(currentFrame);
+        if (currentFrame >= segmentEnd || isLast || isMarker) {
+          playing = false;
+          playbackLoopActive = false;
+          hidePlaybackIndicator();
+          scheduleFrameCacheWarm(currentFrame);
+          return;
+        }
+
+        requestAnimationFrame(loop);
+      } catch (error) {
+        playbackLoopActive = false;
         hidePlaybackIndicator();
-        scheduleOptimisticPreload(currentFrame, { excludeFrame: currentFrame });
-        return;
+        handleAsyncError(error, { hideProgressOnCancel: true });
       }
-
-      requestAnimationFrame(loop);
     }
 
     showPlaybackIndicator();
+    playbackLoopActive = true;
     requestAnimationFrame(loop);
   }
 
@@ -891,9 +1044,13 @@ class CancelledActionError extends Error {
     });
   }
 
-  function runBackground(action) {
+  function runBackground(action, { fatal = true } = {}) {
     action().catch((error) => {
-      handleAsyncError(error);
+      if (fatal) {
+        handleAsyncError(error);
+      } else {
+        console.warn(error);
+      }
     });
   }
 
@@ -982,7 +1139,7 @@ class CancelledActionError extends Error {
     showPlayer();
     showAdvanceHintWhenVisible();
     scheduleDecodedBuffer(0, { actionId: initialActionId });
-    scheduleOptimisticPreload(0, { excludeFrame: 0 });
+    scheduleFrameCacheWarm(0);
   } catch (error) {
     hideLoadingProgress();
     showMessage("Failed to load frames");

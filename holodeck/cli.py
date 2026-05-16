@@ -52,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     render_frame_selection.add_argument(
         "--markers-only",
         action="store_true",
-        help="Render only frames that have a timeline marker. Does not update manifest.json.",
+        help="Render timeline marker frames plus the scene end frame. Does not update manifest.json.",
     )
     render_parser.set_defaults(func=render_frames_command)
     command_parsers.append(render_parser)
@@ -67,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
     refresh_parser.add_argument(
         "--markers-only",
         action="store_true",
-        help="Write a manifest containing only marker frames (skips frames without a marker).",
+        help="Write a manifest containing marker frames plus the scene end frame.",
     )
     refresh_parser.set_defaults(func=refresh_command)
     command_parsers.append(refresh_parser)
@@ -83,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_parser.add_argument(
         "--markers-only",
         action="store_true",
-        help="Render only marker frames and write a marker-only manifest.",
+        help="Render marker frames plus the scene end frame and write a marker-only manifest.",
     )
     build_parser.set_defaults(func=build_command)
     command_parsers.append(build_parser)
@@ -323,7 +323,7 @@ def refresh_command(args: argparse.Namespace) -> int:
 def _select_marker_frame_paths(metadata) -> list[str]:
     frame_count = len(metadata.frame_paths)
     paths: list[str] = []
-    for marker in sorted(metadata.marker_frames):
+    for marker in sorted({*metadata.marker_frames, metadata.frame_end}):
         index = marker - metadata.frame_start
         if 0 <= index < frame_count:
             paths.append(metadata.frame_paths[index])

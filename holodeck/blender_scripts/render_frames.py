@@ -42,7 +42,7 @@ def parse_args(argv):
     parser.add_argument(
         "--markers-only",
         action="store_true",
-        help="Render only frames that have a timeline marker.",
+        help="Render only timeline marker frames plus the scene end frame.",
     )
     return parser.parse_args(argv)
 
@@ -64,13 +64,21 @@ def main(argv):
         render_engine=args.render_engine,
     )
 
-    if args.frames and args.markers_only:
-        raise ValueError("Cannot combine --frames and --markers-only.")
+    selected_frame_modes = [
+        mode
+        for mode, enabled in (
+            ("--frames", bool(args.frames)),
+            ("--markers-only", args.markers_only),
+        )
+        if enabled
+    ]
+    if len(selected_frame_modes) > 1:
+        raise ValueError(f"Cannot combine {', '.join(selected_frame_modes)}.")
 
     if args.frames:
         frames_to_render = parse_frame_spec(args.frames)
     elif args.markers_only:
-        frames_to_render = sorted({marker.frame for marker in scene.timeline_markers})
+        frames_to_render = sorted(_timeline_marker_frames(scene) | {scene.frame_end})
     else:
         frames_to_render = None
 
@@ -81,6 +89,14 @@ def main(argv):
             scene.frame_set(frame)
             scene.render.filepath = f"{render_dir}/{frame:04d}"
             bpy.ops.render.render(write_still=True, scene=scene.name)
+
+
+def _timeline_marker_frames(scene):
+    return {
+        marker.frame
+        for marker in scene.timeline_markers
+        if scene.frame_start <= marker.frame <= scene.frame_end
+    }
 
 
 if __name__ == "__main__":

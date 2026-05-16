@@ -188,12 +188,12 @@ class TestRenderBlend:
                 render_engine="internal",
             )
 
-    def test_rejects_combining_frames_and_markers_only(self, tmp_path):
+    def test_rejects_combining_frame_selection_modes(self, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
 
-        with pytest.raises(ValueError, match="frames"):
+        with pytest.raises(ValueError, match="frame selection"):
             render_blend(
                 blend_file=blend_file,
                 output_dir=output_dir,
