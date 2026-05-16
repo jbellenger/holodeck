@@ -1,8 +1,9 @@
 const loadingIndicatorDelayMillis = 32;
 const frameCacheWarmConcurrency = 3;
+const playbackSegmentWarmConcurrency = 6;
 const aggressiveFrameCacheLimit = 5000;
 const swipeThresholdPixels = 48;
-const decodedFrameBufferAhead = 18;
+const decodedFrameBufferAhead = 45;
 const decodedFrameBufferBehind = 1;
 const decodedFrameConcurrency = 4;
 const playbackIndicatorSize = 2;
@@ -57,6 +58,9 @@ class CancelledActionError extends Error {
   let decodedBufferScheduled = false;
   let decodedBufferRequest = null;
   let frameCacheWarmRunning = false;
+  let frameCacheWarmPauseCount = 0;
+  let frameCacheWarmIdlePromise = null;
+  let frameCacheWarmIdleResolve = null;
   let allFramesCacheWarmQueued = false;
   const frameUrls = frames.map((framePath) => buildFrameUrl(framePath, token));
   const warmedFrames = new Array(frameUrls.length).fill(false);
@@ -363,6 +367,30 @@ class CancelledActionError extends Error {
     return frameWindow;
   }
 
+  function getFrameRange(startFrame, endFrame) {
+    const firstFrame = Math.max(0, startFrame);
+    const lastFrame = Math.min(frameUrls.length - 1, endFrame);
+    const frameRange = [];
+
+    for (let frameIndex = firstFrame; frameIndex <= lastFrame; frameIndex += 1) {
+      frameRange.push(frameIndex);
+    }
+
+    return frameRange;
+  }
+
+  function isFrameWarm(frameIndex, { retainBlob = false } = {}) {
+    if (decodedFrames.has(frameIndex)) {
+      return true;
+    }
+
+    if (retainBlob) {
+      return Boolean(warmedFrameBlobs[frameIndex]);
+    }
+
+    return warmedFrames[frameIndex];
+  }
+
   async function warmFrame(frameIndex, { retainBlob = true } = {}) {
     if (retainBlob && warmedFrameBlobs[frameIndex]) {
       return warmedFrameBlobs[frameIndex];
@@ -378,7 +406,7 @@ class CancelledActionError extends Error {
       return null;
     }
 
-    if (warmedFrames[frameIndex]) {
+    if (warmedFrames[frameIndex] && !retainBlob) {
       return null;
     }
 
@@ -406,6 +434,66 @@ class CancelledActionError extends Error {
     return null;
   }
 
+  async function warmFrames(
+    frameIndexes,
+    {
+      retainBlob = true,
+      concurrency = frameCacheWarmConcurrency,
+      actionId = null,
+      onProgress = null,
+    } = {}
+  ) {
+    const framesToWarm = [];
+    const seenFrameIndexes = new Set();
+    let completedFrames = 0;
+
+    for (const frameIndex of frameIndexes) {
+      if (
+        frameIndex < 0 ||
+        frameIndex >= frameUrls.length ||
+        seenFrameIndexes.has(frameIndex)
+      ) {
+        continue;
+      }
+
+      seenFrameIndexes.add(frameIndex);
+      if (isFrameWarm(frameIndex, { retainBlob })) {
+        completedFrames += 1;
+      } else {
+        framesToWarm.push(frameIndex);
+      }
+    }
+
+    const totalFrames = completedFrames + framesToWarm.length;
+    if (onProgress) {
+      onProgress(completedFrames, totalFrames);
+    }
+
+    if (framesToWarm.length === 0) {
+      return;
+    }
+
+    let nextFrameOffset = 0;
+
+    async function worker() {
+      while (nextFrameOffset < framesToWarm.length) {
+        assertActionIfProvided(actionId);
+        const frameIndex = framesToWarm[nextFrameOffset];
+        nextFrameOffset += 1;
+        await warmFrame(frameIndex, { retainBlob });
+        assertActionIfProvided(actionId);
+        completedFrames += 1;
+        if (onProgress) {
+          onProgress(completedFrames, totalFrames);
+        }
+      }
+    }
+
+    const workerCount = Math.min(concurrency, framesToWarm.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    assertActionIfProvided(actionId);
+  }
+
   function moveQueuedFrameToFront(frameIndex, prioritizedFrames) {
     const existingIndex = frameCacheWarmQueue.indexOf(frameIndex);
     if (existingIndex === -1) {
@@ -414,6 +502,55 @@ class CancelledActionError extends Error {
 
     frameCacheWarmQueue.splice(existingIndex, 1);
     prioritizedFrames.push(frameIndex);
+  }
+
+  function isFrameCacheWarmPaused() {
+    return frameCacheWarmPauseCount > 0;
+  }
+
+  function pauseFrameCacheWarm() {
+    let released = false;
+    frameCacheWarmPauseCount += 1;
+
+    return () => {
+      if (released) {
+        return;
+      }
+
+      released = true;
+      frameCacheWarmPauseCount = Math.max(0, frameCacheWarmPauseCount - 1);
+      if (
+        !isFrameCacheWarmPaused() &&
+        frameCacheWarmQueue.length > 0 &&
+        !frameCacheWarmRunning
+      ) {
+        runBackground(runFrameCacheWarmQueue, { fatal: false });
+      }
+    };
+  }
+
+  function notifyFrameCacheWarmIdle() {
+    if (frameCacheWarmRunning || !frameCacheWarmIdleResolve) {
+      return;
+    }
+
+    frameCacheWarmIdleResolve();
+    frameCacheWarmIdlePromise = null;
+    frameCacheWarmIdleResolve = null;
+  }
+
+  function waitForFrameCacheWarmIdle() {
+    if (!frameCacheWarmRunning) {
+      return Promise.resolve();
+    }
+
+    if (!frameCacheWarmIdlePromise) {
+      frameCacheWarmIdlePromise = new Promise((resolve) => {
+        frameCacheWarmIdleResolve = resolve;
+      });
+    }
+
+    return frameCacheWarmIdlePromise;
   }
 
   function queueFrameCacheWarm(frameIndexes, { front = false } = {}) {
@@ -443,20 +580,24 @@ class CancelledActionError extends Error {
       frameCacheWarmQueue.unshift(...prioritizedFrames);
     }
 
-    if (frameCacheWarmQueue.length > 0 && !frameCacheWarmRunning) {
+    if (
+      frameCacheWarmQueue.length > 0 &&
+      !frameCacheWarmRunning &&
+      !isFrameCacheWarmPaused()
+    ) {
       runBackground(runFrameCacheWarmQueue, { fatal: false });
     }
   }
 
   async function runFrameCacheWarmQueue() {
-    if (frameCacheWarmRunning) {
+    if (frameCacheWarmRunning || isFrameCacheWarmPaused()) {
       return;
     }
 
     frameCacheWarmRunning = true;
 
     async function worker() {
-      while (frameCacheWarmQueue.length > 0) {
+      while (frameCacheWarmQueue.length > 0 && !isFrameCacheWarmPaused()) {
         const frameIndex = frameCacheWarmQueue.shift();
         frameCacheWarmQueued.delete(frameIndex);
 
@@ -477,7 +618,8 @@ class CancelledActionError extends Error {
       await Promise.all(Array.from({ length: workerCount }, () => worker()));
     } finally {
       frameCacheWarmRunning = false;
-      if (frameCacheWarmQueue.length > 0) {
+      notifyFrameCacheWarmIdle();
+      if (frameCacheWarmQueue.length > 0 && !isFrameCacheWarmPaused()) {
         runBackground(runFrameCacheWarmQueue, { fatal: false });
       }
     }
@@ -506,6 +648,12 @@ class CancelledActionError extends Error {
 
     entry.release();
     decodedFrames.delete(frameIndex);
+  }
+
+  function releaseWarmedFrameBlobs(startFrame, endFrame) {
+    for (let frameIndex = startFrame; frameIndex <= endFrame; frameIndex += 1) {
+      warmedFrameBlobs[frameIndex] = null;
+    }
   }
 
   function pruneDecodedFrames(referenceFrame) {
@@ -633,6 +781,22 @@ class CancelledActionError extends Error {
 
     const workerCount = Math.min(decodedFrameConcurrency, pendingFrames.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    assertActionIfProvided(actionId);
+  }
+
+  async function warmPlaybackSegment(startFrame, endFrame, { actionId = null } = {}) {
+    const frameIndexes = getFrameRange(startFrame + 1, endFrame);
+    if (frameIndexes.length === 0) {
+      return;
+    }
+
+    showLoadingProgress(0, frameIndexes.length);
+    await warmFrames(frameIndexes, {
+      retainBlob: true,
+      concurrency: playbackSegmentWarmConcurrency,
+      actionId,
+      onProgress: showLoadingProgress,
+    });
     assertActionIfProvided(actionId);
   }
 
@@ -936,26 +1100,55 @@ class CancelledActionError extends Error {
   }
 
   async function play(startFrame, actionId) {
-    const clampedFrame = await renderFrame(startFrame, { actionId });
-    if (clampedFrame === null) {
-      return;
+    const resumeFrameCacheWarm = pauseFrameCacheWarm();
+    let segmentStart = null;
+    let segmentEnd = null;
+
+    function finishPlayback({ releaseBlobs = true, resumeCacheWarm = true } = {}) {
+      playbackLoopActive = false;
+      hidePlaybackIndicator();
+
+      if (releaseBlobs && segmentStart !== null && segmentEnd !== null) {
+        releaseWarmedFrameBlobs(segmentStart, segmentEnd);
+      }
+
+      if (resumeCacheWarm) {
+        resumeFrameCacheWarm();
+      }
     }
 
-    if (!playing) {
-      return;
-    }
+    let clampedFrame;
+    try {
+      clampedFrame = await renderFrame(startFrame, { actionId });
+      if (clampedFrame === null) {
+        finishPlayback({ releaseBlobs: false });
+        return;
+      }
 
-    assertActionActive(actionId);
-    // Start once a short decoded runway is ready; warm the rest in the background.
-    showLoadingProgress();
-    await fillDecodedBuffer(clampedFrame, { actionId });
-    hideLoadingProgress();
-    scheduleFrameCacheWarm(clampedFrame);
+      if (!playing) {
+        finishPlayback({ releaseBlobs: false });
+        return;
+      }
 
-    const segmentEnd = getSegmentEnd(clampedFrame);
-    if (clampedFrame >= segmentEnd || clampedFrame === frameUrls.length - 1) {
-      playing = false;
-      return;
+      assertActionActive(actionId);
+      segmentStart = clampedFrame;
+      segmentEnd = getSegmentEnd(clampedFrame);
+      if (clampedFrame >= segmentEnd || clampedFrame === frameUrls.length - 1) {
+        playing = false;
+        finishPlayback({ releaseBlobs: false });
+        return;
+      }
+
+      // Start only after this marker-to-marker segment is fetched and a decoded runway is ready.
+      await waitForFrameCacheWarmIdle();
+      assertActionActive(actionId);
+      await warmPlaybackSegment(clampedFrame, segmentEnd, { actionId });
+      showLoadingProgress();
+      await fillDecodedBuffer(clampedFrame, { actionId });
+      hideLoadingProgress();
+    } catch (error) {
+      finishPlayback({ releaseBlobs: !(error instanceof CancelledActionError) });
+      throw error;
     }
 
     let lastPlaybackTimestamp = performance.now();
@@ -964,8 +1157,7 @@ class CancelledActionError extends Error {
     function loop(timestamp) {
       try {
         if (!playing || !isActionActive(actionId)) {
-          playbackLoopActive = false;
-          hidePlaybackIndicator();
+          finishPlayback({ releaseBlobs: false });
           return;
         }
 
@@ -1004,16 +1196,14 @@ class CancelledActionError extends Error {
         const isMarker = currentFrame !== clampedFrame && markerSet.has(currentFrame);
         if (currentFrame >= segmentEnd || isLast || isMarker) {
           playing = false;
-          playbackLoopActive = false;
-          hidePlaybackIndicator();
+          finishPlayback();
           scheduleFrameCacheWarm(currentFrame);
           return;
         }
 
         requestAnimationFrame(loop);
       } catch (error) {
-        playbackLoopActive = false;
-        hidePlaybackIndicator();
+        finishPlayback({ releaseBlobs: !(error instanceof CancelledActionError) });
         handleAsyncError(error, { hideProgressOnCancel: true });
       }
     }

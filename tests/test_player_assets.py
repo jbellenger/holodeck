@@ -39,9 +39,10 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert '<div id="playback-indicator" aria-hidden="true" hidden></div>' in index_html
     assert 'const loadingIndicatorDelayMillis = 32;' in player_js
     assert 'const frameCacheWarmConcurrency = 3;' in player_js
+    assert 'const playbackSegmentWarmConcurrency = 6;' in player_js
     assert 'const aggressiveFrameCacheLimit = 5000;' in player_js
     assert 'const swipeThresholdPixels = 48;' in player_js
-    assert 'const decodedFrameBufferAhead = 18;' in player_js
+    assert 'const decodedFrameBufferAhead = 45;' in player_js
     assert 'const decodedFrameBufferBehind = 1;' in player_js
     assert 'const decodedFrameConcurrency = 4;' in player_js
     assert 'const playbackIndicatorSize = 2;' in player_js
@@ -76,6 +77,11 @@ def test_player_assets_include_expected_keyboard_controls_and_loading_delay():
     assert 'const warmedBlob = await warmFrame(frameIndex);' in player_js
     assert "const warmedFrameBlobs = new Array(frameUrls.length).fill(null);" in player_js
     assert "async function warmFrame(frameIndex, { retainBlob = true } = {})" in player_js
+    assert "async function warmPlaybackSegment(startFrame, endFrame, { actionId = null } = {})" in player_js
+    assert "await warmPlaybackSegment(clampedFrame, segmentEnd, { actionId });" in player_js
+    assert "const resumeFrameCacheWarm = pauseFrameCacheWarm();" in player_js
+    assert "await waitForFrameCacheWarmIdle();" in player_js
+    assert "!isFrameCacheWarmPaused()" in player_js
     assert "warmFrame(frameIndex, { retainBlob: false });" in player_js
     assert "warmedFrameBlobs[frameIndex] = null;" in player_js
     assert "const decodedFrame = await decodedFramePromises.get(frameIndex);" in player_js

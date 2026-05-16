@@ -102,6 +102,10 @@ Common presenter shortcuts:
 - Press the left or right arrow keys to jump between markers.
 - Press <kbd>F</kbd> or swipe up to enter fullscreen.
 
+Before animating, the player fetches the full frame segment up to the next
+marker and decodes a short runway. This keeps S3 or other static-host latency
+out of the animation loop.
+
 ### 5. Refresh Your Holodeck
 
 Use `refresh` when the rendered frame files already exist, but the player bundle
