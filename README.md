@@ -10,7 +10,9 @@ real-time during a presentation.
 Holodeck renders frames as avif images, which has excellent compression and is
 supported in all browsers.
 
-Live demo: [jbellenger.github.io/holodeck](https://jbellenger.github.io/holodeck/)
+Gallery: 
+- [the demo in this repository](https://jbellenger.github.io/holodeck/)
+- [Brute Force Correctness (GraphQLConf 2026)](http://graphqlconf-26.s3-website-us-west-2.amazonaws.com/)
 
 ## Quickstart
 
