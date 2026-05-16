@@ -8,9 +8,11 @@ from typing import Any
 
 HOLODECK_RENDER_FILE_FORMAT = "AVIF"
 HOLODECK_RENDER_MEDIA_TYPE = "IMAGE"
-DEFAULT_RESOLUTION_PERCENTAGE = 100
-RENDER_ENGINE_CHOICES = ("eevee", "cycles", "workbench")
-RENDER_ENGINE_IDS = {
+DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE = 50
+DEFAULT_STILL_RESOLUTION_PERCENTAGE = 100
+DEFAULT_RESOLUTION_PERCENTAGE = DEFAULT_STILL_RESOLUTION_PERCENTAGE
+RENDERER_CHOICES = ("eevee", "cycles", "workbench")
+RENDERER_IDS = {
     "eevee": ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"),
     "cycles": ("CYCLES",),
     "workbench": ("BLENDER_WORKBENCH",),
@@ -22,13 +24,13 @@ def configure_scene_for_holodeck_render(
     render_dir: Path,
     *,
     resolution_percentage: int = DEFAULT_RESOLUTION_PERCENTAGE,
-    render_engine: str | None = None,
+    renderer: str | None = None,
 ) -> None:
     """Force Blender scene output into a Holodeck-compatible image sequence."""
     if resolution_percentage <= 0:
         raise ValueError("Resolution percentage must be a positive integer.")
-    if render_engine is not None:
-        _apply_render_engine_override(scene, render_engine)
+    if renderer is not None:
+        _apply_renderer_override(scene, renderer)
 
     render = scene.render
     image_settings = render.image_settings
@@ -46,17 +48,17 @@ def configure_scene_for_holodeck_render(
         ) from exc
 
 
-def _apply_render_engine_override(scene: Any, render_engine: str) -> None:
-    if render_engine not in RENDER_ENGINE_IDS:
-        choices = ", ".join(RENDER_ENGINE_CHOICES)
-        raise ValueError(f"Render engine must be one of: {choices}.")
+def _apply_renderer_override(scene: Any, renderer: str) -> None:
+    if renderer not in RENDERER_IDS:
+        choices = ", ".join(RENDERER_CHOICES)
+        raise ValueError(f"Renderer must be one of: {choices}.")
 
     render = scene.render
-    for engine_id in RENDER_ENGINE_IDS[render_engine]:
+    for engine_id in RENDERER_IDS[renderer]:
         try:
             render.engine = engine_id
         except (AttributeError, TypeError, ValueError):
             continue
         return
 
-    raise RuntimeError(f"Blender does not support the requested render engine: {render_engine}.")
+    raise RuntimeError(f"Blender does not support the requested renderer: {renderer}.")

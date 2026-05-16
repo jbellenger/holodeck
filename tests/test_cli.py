@@ -21,8 +21,12 @@ class TestCliHelp:
         assert "usage: holodeck build" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
-        assert "--res-pct RES_PCT" in captured.out
-        assert "--render-engine {eevee,cycles,workbench}" in captured.out
+        assert "--animation-res-pct ANIMATION_RES_PCT" in captured.out
+        assert "--still-res-pct STILL_RES_PCT" in captured.out
+        assert "--res-pct" not in captured.out
+        assert "--animation-renderer {eevee,cycles,workbench}" in captured.out
+        assert "--still-renderer {eevee,cycles,workbench}" in captured.out
+        assert "--render-engine" not in captured.out
         assert "--scene SCENE" in captured.out
         assert "--title TITLE" in captured.out
         assert "--port PORT" in captured.out
@@ -43,8 +47,12 @@ class TestCliHelp:
         assert "usage: holodeck build" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
-        assert "--res-pct RES_PCT" in captured.out
-        assert "--render-engine {eevee,cycles,workbench}" in captured.out
+        assert "--animation-res-pct ANIMATION_RES_PCT" in captured.out
+        assert "--still-res-pct STILL_RES_PCT" in captured.out
+        assert "--res-pct" not in captured.out
+        assert "--animation-renderer {eevee,cycles,workbench}" in captured.out
+        assert "--still-renderer {eevee,cycles,workbench}" in captured.out
+        assert "--render-engine" not in captured.out
         assert "--scene SCENE" in captured.out
         assert "--title TITLE" in captured.out
         assert "--port PORT" in captured.out
@@ -67,13 +75,24 @@ class TestRenderFramesCommand:
             lambda **kwargs: calls.append(("render", kwargs)),
         )
 
-        exit_code = main(["render-frames", str(blend_file), str(output_dir), "--res-pct", "50"])
+        exit_code = main(
+            [
+                "render-frames",
+                str(blend_file),
+                str(output_dir),
+                "--animation-res-pct",
+                "60",
+                "--still-res-pct",
+                "125",
+            ]
+        )
 
         assert exit_code == 0
         assert calls[0] == ("deploy", output_dir.resolve())
         assert calls[1][0] == "render"
         assert calls[1][1]["blend_file"] == blend_file.resolve()
-        assert calls[1][1]["res_pct"] == 50
+        assert calls[1][1]["animation_res_pct"] == 60
+        assert calls[1][1]["still_res_pct"] == 125
 
     def test_passes_title_option_to_player_deploy(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
@@ -94,17 +113,41 @@ class TestRenderFramesCommand:
         assert exit_code == 0
         assert calls == [("deploy", output_dir.resolve(), "Demo Deck")]
 
-    def test_rejects_non_positive_resolution_percentage(self, tmp_path, capsys):
+    def test_rejects_non_positive_animation_resolution_percentage(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
 
         with pytest.raises(SystemExit) as exc_info:
-            main(["render-frames", str(blend_file), str(output_dir), "--res-pct", "0"])
+            main(["render-frames", str(blend_file), str(output_dir), "--animation-res-pct", "0"])
 
         captured = capsys.readouterr()
         assert exc_info.value.code == 2
         assert "must be a positive integer" in captured.err
+
+    def test_rejects_non_positive_still_resolution_percentage(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["render-frames", str(blend_file), str(output_dir), "--still-res-pct", "0"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "must be a positive integer" in captured.err
+
+    def test_rejects_removed_res_pct_option(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["render-frames", str(blend_file), str(output_dir), "--res-pct", "50"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "unrecognized arguments" in captured.err
 
     def test_passes_frames_option_through_to_render(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
@@ -141,10 +184,13 @@ class TestRenderFramesCommand:
 
         assert exit_code == 0
         assert calls[0]["frames"] is None
-        assert calls[0]["markers_only"] is False
-        assert calls[0]["render_engine"] is None
+        assert calls[0]["stills_only"] is False
+        assert calls[0]["animation_res_pct"] == 50
+        assert calls[0]["still_res_pct"] == 100
+        assert calls[0]["animation_renderer"] is None
+        assert calls[0]["still_renderer"] is None
 
-    def test_passes_render_engine_option_through_to_render(self, monkeypatch, tmp_path):
+    def test_passes_renderer_options_through_to_render(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
@@ -157,13 +203,22 @@ class TestRenderFramesCommand:
         )
 
         exit_code = main(
-            ["render-frames", str(blend_file), str(output_dir), "--render-engine", "eevee"]
+            [
+                "render-frames",
+                str(blend_file),
+                str(output_dir),
+                "--animation-renderer",
+                "eevee",
+                "--still-renderer",
+                "cycles",
+            ]
         )
 
         assert exit_code == 0
-        assert calls[0]["render_engine"] == "eevee"
+        assert calls[0]["animation_renderer"] == "eevee"
+        assert calls[0]["still_renderer"] == "cycles"
 
-    def test_rejects_invalid_render_engine(self, tmp_path, capsys):
+    def test_rejects_invalid_renderer(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
@@ -174,7 +229,7 @@ class TestRenderFramesCommand:
                     "render-frames",
                     str(blend_file),
                     str(output_dir),
-                    "--render-engine",
+                    "--animation-renderer",
                     "internal",
                 ]
             )
@@ -183,7 +238,19 @@ class TestRenderFramesCommand:
         assert exc_info.value.code == 2
         assert "invalid choice" in captured.err
 
-    def test_passes_markers_only_option_through_to_render(self, monkeypatch, tmp_path):
+    def test_rejects_removed_render_engine_option(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["render-frames", str(blend_file), str(output_dir), "--render-engine", "eevee"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "unrecognized arguments" in captured.err
+
+    def test_passes_stills_only_option_through_to_render(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
@@ -196,14 +263,14 @@ class TestRenderFramesCommand:
         )
 
         exit_code = main(
-            ["render-frames", str(blend_file), str(output_dir), "--markers-only"]
+            ["render-frames", str(blend_file), str(output_dir), "--stills-only"]
         )
 
         assert exit_code == 0
-        assert calls[0]["markers_only"] is True
+        assert calls[0]["stills_only"] is True
         assert calls[0]["frames"] is None
 
-    def test_rejects_combining_frames_and_markers_only(self, tmp_path, capsys):
+    def test_rejects_combining_frames_and_stills_only(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
@@ -216,13 +283,25 @@ class TestRenderFramesCommand:
                     str(output_dir),
                     "--frames",
                     "1",
-                    "--markers-only",
+                    "--stills-only",
                 ]
             )
 
         captured = capsys.readouterr()
         assert exc_info.value.code == 2
         assert "not allowed with" in captured.err
+
+    def test_rejects_removed_markers_only_option(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["render-frames", str(blend_file), str(output_dir), "--markers-only"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "unrecognized arguments" in captured.err
 
     def test_rejects_invalid_frames_spec(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -270,70 +349,17 @@ class TestRefreshCommand:
         assert manifest["markers"] == [0, 1]
         assert "token" in manifest
 
-    def test_writes_markers_only_manifest(self, monkeypatch, tmp_path):
+    def test_rejects_stills_only_option(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
-        render_dir = output_dir / "render"
-        render_dir.mkdir(parents=True)
-        (render_dir / "0001.png").write_bytes(b"frame-1")
-        (render_dir / "0003.png").write_bytes(b"frame-3")
-        (render_dir / "0004.png").write_bytes(b"frame-4")
 
-        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
-        monkeypatch.setattr(
-            "holodeck.cli.extract_blend_metadata",
-            lambda **kwargs: BlendMetadata(
-                fps=24,
-                frame_start=1,
-                frame_end=4,
-                marker_frames=[1, 3],
-                frame_paths=[
-                    str(render_dir / "0001.png"),
-                    str(render_dir / "0002.png"),
-                    str(render_dir / "0003.png"),
-                    str(render_dir / "0004.png"),
-                ],
-            ),
-        )
-
-        exit_code = main(["refresh", str(blend_file), str(output_dir), "--markers-only"])
-
-        assert exit_code == 0
-        manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["frames"] == ["render/0001.png", "render/0003.png", "render/0004.png"]
-        assert manifest["markers"] == [0, 1, 2]
-
-    def test_markers_only_fails_when_marker_frames_missing(self, monkeypatch, tmp_path, capsys):
-        blend_file = tmp_path / "demo.blend"
-        blend_file.touch()
-        output_dir = tmp_path / "dist"
-        render_dir = output_dir / "render"
-        render_dir.mkdir(parents=True)
-        (render_dir / "0002.png").write_bytes(b"frame-2")
-
-        monkeypatch.setattr("holodeck.cli.deploy_player", lambda _: None)
-        monkeypatch.setattr(
-            "holodeck.cli.extract_blend_metadata",
-            lambda **kwargs: BlendMetadata(
-                fps=24,
-                frame_start=1,
-                frame_end=4,
-                marker_frames=[1, 3],
-                frame_paths=[
-                    str(render_dir / "0001.png"),
-                    str(render_dir / "0002.png"),
-                    str(render_dir / "0003.png"),
-                    str(render_dir / "0004.png"),
-                ],
-            ),
-        )
-
-        exit_code = main(["refresh", str(blend_file), str(output_dir), "--markers-only"])
+        with pytest.raises(SystemExit) as exc_info:
+            main(["refresh", str(blend_file), str(output_dir), "--stills-only"])
 
         captured = capsys.readouterr()
-        assert exit_code == 1
-        assert "Missing 3 rendered frame(s)" in captured.err
+        assert exc_info.value.code == 2
+        assert "unrecognized arguments" in captured.err
 
     def test_fails_when_expected_frames_are_missing(self, monkeypatch, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -370,36 +396,65 @@ class TestBuildCommand:
 
         monkeypatch.setattr(
             "holodeck.cli.render_frames_command",
-            lambda args: calls.append(("render", args.blend_file, args.output_dir, args.res_pct)) or 0,
+            lambda args: calls.append(
+                (
+                    "render",
+                    args.blend_file,
+                    args.output_dir,
+                    args.animation_res_pct,
+                    args.still_res_pct,
+                )
+            )
+            or 0,
         )
         monkeypatch.setattr(
-            "holodeck.cli.refresh_command",
-            lambda args: calls.append(("manifest", args.blend_file, args.output_dir, args.res_pct)) or 0,
+            "holodeck.cli._refresh_output",
+            lambda args, *, stills_only: calls.append(
+                (
+                    "manifest",
+                    args.blend_file,
+                    args.output_dir,
+                    args.animation_res_pct,
+                    args.still_res_pct,
+                    stills_only,
+                )
+            )
+            or 0,
         )
 
-        exit_code = main(["build", str(blend_file), str(output_dir), "--res-pct", "200"])
+        exit_code = main(
+            [
+                "build",
+                str(blend_file),
+                str(output_dir),
+                "--animation-res-pct",
+                "40",
+                "--still-res-pct",
+                "150",
+            ]
+        )
 
         assert exit_code == 0
         assert calls == [
-            ("render", str(blend_file), str(output_dir), 200),
-            ("manifest", str(blend_file), str(output_dir), 200),
+            ("render", str(blend_file), str(output_dir), 40, 150),
+            ("manifest", str(blend_file), str(output_dir), 40, 150, False),
         ]
 
-    def test_propagates_markers_only_to_render_and_refresh(self, monkeypatch, tmp_path):
+    def test_propagates_stills_only_to_render_and_private_refresh(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         output_dir = tmp_path / "dist"
         calls = []
 
         monkeypatch.setattr(
             "holodeck.cli.render_frames_command",
-            lambda args: calls.append(("render", args.markers_only)) or 0,
+            lambda args: calls.append(("render", args.stills_only)) or 0,
         )
         monkeypatch.setattr(
-            "holodeck.cli.refresh_command",
-            lambda args: calls.append(("manifest", args.markers_only)) or 0,
+            "holodeck.cli._refresh_output",
+            lambda args, *, stills_only: calls.append(("manifest", stills_only)) or 0,
         )
 
-        exit_code = main(["build", str(blend_file), str(output_dir), "--markers-only"])
+        exit_code = main(["build", str(blend_file), str(output_dir), "--stills-only"])
 
         assert exit_code == 0
         assert calls == [("render", True), ("manifest", True)]
@@ -414,33 +469,84 @@ class TestBuildCommand:
             lambda args: calls.append(("render", args.title)) or 0,
         )
         monkeypatch.setattr(
-            "holodeck.cli.refresh_command",
-            lambda args: calls.append(("manifest", args.title)) or 0,
+            "holodeck.cli._refresh_output",
+            lambda args, *, stills_only: calls.append(("manifest", args.title, stills_only)) or 0,
         )
 
         exit_code = main(["build", str(blend_file), str(output_dir), "--title", "Demo Deck"])
 
         assert exit_code == 0
-        assert calls == [("render", "Demo Deck"), ("manifest", "Demo Deck")]
+        assert calls == [("render", "Demo Deck"), ("manifest", "Demo Deck", False)]
 
-    def test_propagates_render_engine_to_render_and_refresh(self, monkeypatch, tmp_path):
+    def test_propagates_renderer_to_render_and_refresh(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         output_dir = tmp_path / "dist"
         calls = []
 
         monkeypatch.setattr(
             "holodeck.cli.render_frames_command",
-            lambda args: calls.append(("render", args.render_engine)) or 0,
+            lambda args: calls.append(("render", args.animation_renderer, args.still_renderer)) or 0,
         )
         monkeypatch.setattr(
-            "holodeck.cli.refresh_command",
-            lambda args: calls.append(("manifest", args.render_engine)) or 0,
+            "holodeck.cli._refresh_output",
+            lambda args, *, stills_only: calls.append(
+                ("manifest", args.animation_renderer, args.still_renderer, stills_only)
+            )
+            or 0,
         )
 
-        exit_code = main(["build", str(blend_file), str(output_dir), "--render-engine", "cycles"])
+        exit_code = main(
+            [
+                "build",
+                str(blend_file),
+                str(output_dir),
+                "--animation-renderer",
+                "workbench",
+                "--still-renderer",
+                "cycles",
+            ]
+        )
 
         assert exit_code == 0
-        assert calls == [("render", "cycles"), ("manifest", "cycles")]
+        assert calls == [
+            ("render", "workbench", "cycles"),
+            ("manifest", "workbench", "cycles", False),
+        ]
+
+    def test_stills_only_build_writes_stills_only_manifest(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        render_dir = output_dir / "render"
+        render_dir.mkdir(parents=True)
+        (render_dir / "0001.png").write_bytes(b"frame-1")
+        (render_dir / "0003.png").write_bytes(b"frame-3")
+        (render_dir / "0004.png").write_bytes(b"frame-4")
+
+        monkeypatch.setattr("holodeck.cli.deploy_player", lambda *args, **kwargs: None)
+        monkeypatch.setattr("holodeck.cli.render_blend", lambda **kwargs: None)
+        monkeypatch.setattr(
+            "holodeck.cli.extract_blend_metadata",
+            lambda **kwargs: BlendMetadata(
+                fps=24,
+                frame_start=1,
+                frame_end=4,
+                marker_frames=[3],
+                frame_paths=[
+                    str(render_dir / "0001.png"),
+                    str(render_dir / "0002.png"),
+                    str(render_dir / "0003.png"),
+                    str(render_dir / "0004.png"),
+                ],
+            ),
+        )
+
+        exit_code = main(["build", str(blend_file), str(output_dir), "--stills-only"])
+
+        assert exit_code == 0
+        manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["frames"] == ["render/0001.png", "render/0003.png", "render/0004.png"]
+        assert manifest["markers"] == [0, 1, 2]
 
 
 class TestServeCommand:

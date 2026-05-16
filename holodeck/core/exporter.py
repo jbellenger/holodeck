@@ -106,12 +106,12 @@ def write_manifest_from_frames(
     return manifest_path, manifest
 
 
-def write_markers_only_manifest_from_frames(
+def write_stills_only_manifest_from_frames(
     frame_paths: Iterable[str],
     fps: int,
     export_root: Path,
 ) -> Tuple[Path, Dict[str, Any]]:
-    """Write a manifest where every supplied frame is treated as a marker."""
+    """Write a manifest where every supplied still frame is navigable."""
     generator = ManifestGenerator()
     for frame_path in frame_paths:
         generator.add_frame(frame_path)

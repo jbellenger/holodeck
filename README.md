@@ -4,7 +4,7 @@ Holodeck is a command-line tool that renders Blender animations as slide decks
 that can be viewed in a web browser.
 
 Because Holodeck works with pre-rendered frames, it can produce slide decks with
-much higher visual fidelity than a tool like Google Slides, while still feeling
+higher visual fidelity than a tool like Google Slides, while still feeling
 real-time during a presentation.
 
 Holodeck renders frames as avif images, which has excellent compression and is
@@ -53,10 +53,6 @@ In Blender, add timeline markers with <kbd>M</kbd> on the frames where the
 presentation should pause. During playback, pressing space or tapping advances
 from the current marker to the next marker.
 
-Markers outside the rendered frame range are ignored. Marker frame numbers are
-stored relative to the scene start frame, so a marker on the first rendered frame
-becomes marker `0` in the exported manifest.
-
 ### 3. Build Your Holodeck
 
 Run `build` with a source `.blend` file and an output directory:
@@ -67,21 +63,18 @@ holodeck build path/to/deck.blend dist --title "My Deck"
 
 `build` renders the frames, writes `manifest.json`, and installs the browser
 player assets into the output directory. The result is a static site that can be
-served locally or uploaded to a static host.
+served locally or uploaded to a static host. By default, Holodeck renders the
+animation at 50% resolution, then renders the first, marker, and last frames at
+100% resolution over the same filenames.
 
 Useful build options:
 
-```bash
-holodeck build path/to/deck.blend dist --scene "Scene"
-holodeck build path/to/deck.blend dist --res-pct 50
-holodeck build path/to/deck.blend dist --render-engine cycles
-holodeck build path/to/deck.blend dist --markers-only
-```
-
 - `--scene` renders a specific Blender scene instead of the active scene.
-- `--res-pct` overrides Blender's render resolution percentage.
-- `--render-engine` overrides the Blend file render engine with `eevee`, `cycles`, or `workbench`.
-- `--markers-only` renders marker frames plus the scene end frame and writes a marker-only manifest.
+- `--animation-res-pct` sets the resolution percentage for animation frames. The default is 50.
+- `--still-res-pct` sets the resolution percentage for first, marker, and last frames. The default is 100.
+- `--animation-renderer` overrides the Blend file renderer for animation frames.
+- `--still-renderer` overrides the Blend file renderer for first, marker, and last frames.
+- `--stills-only` renders first, marker, and last frames and writes a stills-only manifest.
 - `--title` sets the generated player page title.
 
 ### 4. Play Your Holodeck Locally
@@ -169,25 +162,25 @@ example, `"4"`, `"4-10"`, and `"1,2,3,20-24"` are all valid frame specs.
 `manifest.json`. Use it for small visual changes when the timing, markers, and
 scene length have not changed.
 
-## workbench rendering
-The `--render-engine` option override lets you render with a different engine
-without changing the saved setting in the `.blend` file. If you do not pass
-`--render-engine`, Holodeck uses the render engine that is already configured in
-the file.
+## Workbench Rendering
+Renderer overrides let each Holodeck render pass use a different Blender renderer
+without changing the saved setting in the `.blend` file. If you omit a renderer
+override, that pass uses the renderer already configured in the file.
 
 Workbench rendering is useful when you want fast feedback on timing, camera
 motion, and animation. You can render the whole deck with Workbench first:
 
 ```bash
-holodeck build path/to/deck.blend dist --render-engine workbench
+holodeck build path/to/deck.blend dist --animation-renderer workbench
 ```
 
-After the timing feels right, you can re-render selected frames or ranges with a
-final engine. This is useful when only part of the deck needs more visual polish:
+After the timing feels right, you can re-render selected frames or ranges with
+the renderers you want for each pass. This is useful when only part of the deck
+needs more visual polish:
 
 ```bash
-holodeck render-frames path/to/deck.blend dist --frames "48,72-96" --render-engine cycles
+holodeck render-frames path/to/deck.blend dist --frames "48,72-96" --animation-renderer cycles
 ```
 
-You can also omit `--render-engine` during the final pass if the `.blend` file
-already has the final engine selected.
+You can also omit either renderer flag when the `.blend` file already has the
+desired renderer selected for that pass.

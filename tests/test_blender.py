@@ -82,15 +82,23 @@ class TestRenderBlend:
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
-        render_blend(blend_file=blend_file, output_dir=output_dir, scene="Deck", res_pct=50)
+        render_blend(
+            blend_file=blend_file,
+            output_dir=output_dir,
+            scene="Deck",
+            animation_res_pct=50,
+            still_res_pct=125,
+        )
 
         assert captured["blend_file"] == blend_file
         assert captured["script_name"] == "render_frames.py"
         assert captured["script_args"] == [
             "--output",
             str(output_dir),
-            "--res-pct",
+            "--animation-res-pct",
             "50",
+            "--still-res-pct",
+            "125",
             "--scene",
             "Deck",
         ]
@@ -111,7 +119,9 @@ class TestRenderBlend:
         assert captured["script_args"] == [
             "--output",
             str(output_dir),
-            "--res-pct",
+            "--animation-res-pct",
+            "50",
+            "--still-res-pct",
             "100",
             "--frames",
             "1,4-6",
@@ -131,9 +141,9 @@ class TestRenderBlend:
         render_blend(blend_file=blend_file, output_dir=output_dir)
 
         assert "--frames" not in captured["script_args"]
-        assert "--markers-only" not in captured["script_args"]
+        assert "--stills-only" not in captured["script_args"]
 
-    def test_forwards_markers_only_option(self, monkeypatch, tmp_path):
+    def test_forwards_stills_only_option(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
@@ -144,17 +154,19 @@ class TestRenderBlend:
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
-        render_blend(blend_file=blend_file, output_dir=output_dir, markers_only=True)
+        render_blend(blend_file=blend_file, output_dir=output_dir, stills_only=True)
 
         assert captured["script_args"] == [
             "--output",
             str(output_dir),
-            "--res-pct",
+            "--animation-res-pct",
+            "50",
+            "--still-res-pct",
             "100",
-            "--markers-only",
+            "--stills-only",
         ]
 
-    def test_forwards_render_engine_option(self, monkeypatch, tmp_path):
+    def test_forwards_renderer_options(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
@@ -165,27 +177,36 @@ class TestRenderBlend:
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
-        render_blend(blend_file=blend_file, output_dir=output_dir, render_engine="cycles")
+        render_blend(
+            blend_file=blend_file,
+            output_dir=output_dir,
+            animation_renderer="workbench",
+            still_renderer="cycles",
+        )
 
         assert captured["script_args"] == [
             "--output",
             str(output_dir),
-            "--res-pct",
+            "--animation-res-pct",
+            "50",
+            "--still-res-pct",
             "100",
-            "--render-engine",
+            "--animation-renderer",
+            "workbench",
+            "--still-renderer",
             "cycles",
         ]
 
-    def test_rejects_unknown_render_engine(self, tmp_path):
+    def test_rejects_unknown_renderer(self, tmp_path):
         blend_file = tmp_path / "demo.blend"
         blend_file.touch()
         output_dir = tmp_path / "dist"
 
-        with pytest.raises(ValueError, match="Render engine"):
+        with pytest.raises(ValueError, match="Renderer"):
             render_blend(
                 blend_file=blend_file,
                 output_dir=output_dir,
-                render_engine="internal",
+                animation_renderer="internal",
             )
 
     def test_rejects_combining_frame_selection_modes(self, tmp_path):
@@ -198,7 +219,31 @@ class TestRenderBlend:
                 blend_file=blend_file,
                 output_dir=output_dir,
                 frames="1",
-                markers_only=True,
+                stills_only=True,
+            )
+
+    def test_rejects_non_positive_animation_resolution(self, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(ValueError, match="Animation resolution"):
+            render_blend(
+                blend_file=blend_file,
+                output_dir=output_dir,
+                animation_res_pct=0,
+            )
+
+    def test_rejects_non_positive_still_resolution(self, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(ValueError, match="Still resolution"):
+            render_blend(
+                blend_file=blend_file,
+                output_dir=output_dir,
+                still_res_pct=0,
             )
 
 

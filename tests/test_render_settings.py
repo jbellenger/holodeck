@@ -108,7 +108,7 @@ class TestConfigureSceneForHolodeckRender:
         assert scene.render.resolution_percentage == DEFAULT_RESOLUTION_PERCENTAGE
         assert scene.render.image_settings.file_format == HOLODECK_RENDER_FILE_FORMAT
 
-    def test_keeps_blend_render_engine_by_default(self, tmp_path):
+    def test_keeps_blend_renderer_by_default(self, tmp_path):
         scene = _FakeScene()
 
         configure_scene_for_holodeck_render(scene, tmp_path / "render")
@@ -126,13 +126,13 @@ class TestConfigureSceneForHolodeckRender:
 
         assert scene.render.resolution_percentage == 50
 
-    def test_overrides_render_engine(self, tmp_path):
+    def test_overrides_renderer(self, tmp_path):
         scene = _FakeScene()
 
         configure_scene_for_holodeck_render(
             scene,
             tmp_path / "render",
-            render_engine="workbench",
+            renderer="workbench",
         )
 
         assert scene.render.engine == "BLENDER_WORKBENCH"
@@ -143,19 +143,19 @@ class TestConfigureSceneForHolodeckRender:
         configure_scene_for_holodeck_render(
             scene,
             tmp_path / "render",
-            render_engine="eevee",
+            renderer="eevee",
         )
 
         assert scene.render.engine == "BLENDER_EEVEE"
 
-    def test_rejects_unknown_render_engine(self, tmp_path):
+    def test_rejects_unknown_renderer(self, tmp_path):
         scene = _FakeScene()
 
-        with pytest.raises(ValueError, match="Render engine"):
+        with pytest.raises(ValueError, match="Renderer"):
             configure_scene_for_holodeck_render(
                 scene,
                 tmp_path / "render",
-                render_engine="internal",
+                renderer="internal",
             )
 
     def test_converts_video_output_to_image_sequence_before_setting_avif(self, tmp_path):

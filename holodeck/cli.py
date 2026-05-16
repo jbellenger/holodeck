@@ -17,10 +17,15 @@ from .core import (
     get_player_url,
     render_blend,
     write_manifest_from_frames,
-    write_markers_only_manifest_from_frames,
+    write_stills_only_manifest_from_frames,
 )
+from .core.frame_selection import canonical_still_frames
 from .core.frame_spec import parse_frame_spec
-from .core.render_settings import RENDER_ENGINE_CHOICES
+from .core.render_settings import (
+    DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE,
+    DEFAULT_STILL_RESOLUTION_PERCENTAGE,
+    RENDERER_CHOICES,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,9 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     render_frame_selection.add_argument(
-        "--markers-only",
+        "--stills-only",
         action="store_true",
-        help="Render timeline marker frames plus the scene end frame. Does not update manifest.json.",
+        help="Render first, timeline marker, and last frames. Does not update manifest.json.",
     )
     render_parser.set_defaults(func=render_frames_command)
     command_parsers.append(render_parser)
@@ -64,11 +69,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_blend_arguments(refresh_parser)
     _add_player_arguments(refresh_parser)
-    refresh_parser.add_argument(
-        "--markers-only",
-        action="store_true",
-        help="Write a manifest containing marker frames plus the scene end frame.",
-    )
     refresh_parser.set_defaults(func=refresh_command)
     command_parsers.append(refresh_parser)
 
@@ -81,9 +81,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_render_arguments(build_parser)
     _add_player_arguments(build_parser)
     build_parser.add_argument(
-        "--markers-only",
+        "--stills-only",
         action="store_true",
-        help="Render marker frames plus the scene end frame and write a marker-only manifest.",
+        help="Render first, timeline marker, and last frames and write a stills-only manifest.",
     )
     build_parser.set_defaults(func=build_command)
     command_parsers.append(build_parser)
@@ -217,15 +217,26 @@ def _frame_spec(value: str) -> str:
 
 def _add_render_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--res-pct",
+        "--animation-res-pct",
         type=_positive_int,
-        default=100,
-        help="Resolution percentage override for rendering. 100 keeps the blend resolution, 50 halves it, 200 doubles it.",
+        default=DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE,
+        help="Resolution percentage for animation frames.",
     )
     parser.add_argument(
-        "--render-engine",
-        choices=RENDER_ENGINE_CHOICES,
-        help="Override the blend file render engine for rendering.",
+        "--still-res-pct",
+        type=_positive_int,
+        default=DEFAULT_STILL_RESOLUTION_PERCENTAGE,
+        help="Resolution percentage for first, marker, and last frames.",
+    )
+    parser.add_argument(
+        "--animation-renderer",
+        choices=RENDERER_CHOICES,
+        help="Override the blend file renderer for animation frames.",
+    )
+    parser.add_argument(
+        "--still-renderer",
+        choices=RENDERER_CHOICES,
+        help="Override the blend file renderer for first, marker, and last frames.",
     )
 
 
@@ -266,10 +277,12 @@ def render_frames_command(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         blender_executable=args.blender,
         scene=args.scene,
-        res_pct=args.res_pct,
-        render_engine=getattr(args, "render_engine", None),
+        animation_res_pct=args.animation_res_pct,
+        still_res_pct=args.still_res_pct,
+        animation_renderer=getattr(args, "animation_renderer", None),
+        still_renderer=getattr(args, "still_renderer", None),
         frames=getattr(args, "frames", None),
-        markers_only=getattr(args, "markers_only", False),
+        stills_only=getattr(args, "stills_only", False),
     )
 
     print(f"Rendered frames into {output_dir / 'render'}")
@@ -277,9 +290,12 @@ def render_frames_command(args: argparse.Namespace) -> int:
 
 
 def refresh_command(args: argparse.Namespace) -> int:
+    return _refresh_output(args, stills_only=False)
+
+
+def _refresh_output(args: argparse.Namespace, *, stills_only: bool) -> int:
     blend_file = _resolve_blend_file(args.blend_file)
     output_dir = _resolve_output_dir(args.output_dir)
-    markers_only = getattr(args, "markers_only", False)
 
     _deploy_player(output_dir, args)
     metadata = extract_blend_metadata(
@@ -290,7 +306,7 @@ def refresh_command(args: argparse.Namespace) -> int:
     )
 
     frame_paths = (
-        _select_marker_frame_paths(metadata) if markers_only else metadata.frame_paths
+        _select_still_frame_paths(metadata) if stills_only else metadata.frame_paths
     )
 
     missing_frames = [Path(frame_path) for frame_path in frame_paths if not Path(frame_path).is_file()]
@@ -302,8 +318,8 @@ def refresh_command(args: argparse.Namespace) -> int:
             f"Missing {len(missing_frames)} rendered frame(s) in {output_dir / 'render'}: {missing_preview}"
         )
 
-    if markers_only:
-        manifest_path, manifest = write_markers_only_manifest_from_frames(
+    if stills_only:
+        manifest_path, manifest = write_stills_only_manifest_from_frames(
             frame_paths=frame_paths,
             fps=metadata.fps,
             export_root=output_dir,
@@ -320,11 +336,15 @@ def refresh_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _select_marker_frame_paths(metadata) -> list[str]:
+def _select_still_frame_paths(metadata) -> list[str]:
     frame_count = len(metadata.frame_paths)
     paths: list[str] = []
-    for marker in sorted({*metadata.marker_frames, metadata.frame_end}):
-        index = marker - metadata.frame_start
+    for frame in canonical_still_frames(
+        metadata.frame_start,
+        metadata.frame_end,
+        metadata.marker_frames,
+    ):
+        index = frame - metadata.frame_start
         if 0 <= index < frame_count:
             paths.append(metadata.frame_paths[index])
     return paths
@@ -340,7 +360,7 @@ def _deploy_player(output_dir: Path, args: argparse.Namespace) -> None:
 
 def build_command(args: argparse.Namespace) -> int:
     render_frames_command(args)
-    refresh_command(args)
+    _refresh_output(args, stills_only=getattr(args, "stills_only", False))
     return 0
 
 

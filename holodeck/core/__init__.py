@@ -7,10 +7,16 @@ from .exporter import (
     get_render_dir,
     resolve_export_root,
     write_manifest_from_frames,
-    write_markers_only_manifest_from_frames,
+    write_stills_only_manifest_from_frames,
 )
+from .frame_selection import canonical_still_frames, split_animation_and_still_frames
 from .manifest_generator import ManifestGenerator
-from .render_settings import HOLODECK_RENDER_FILE_FORMAT, configure_scene_for_holodeck_render
+from .render_settings import (
+    DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE,
+    DEFAULT_STILL_RESOLUTION_PERCENTAGE,
+    HOLODECK_RENDER_FILE_FORMAT,
+    configure_scene_for_holodeck_render,
+)
 from .runtime import get_package_path, get_package_root
 from .server import (
     DEFAULT_PLAYER_DIR,
@@ -32,6 +38,9 @@ __all__ = [
     "QuietHandler",
     "QuietServer",
     "build_manifest_from_frames",
+    "canonical_still_frames",
+    "DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE",
+    "DEFAULT_STILL_RESOLUTION_PERCENTAGE",
     "extract_blend_metadata",
     "finalize_render_export",
     "get_render_dir",
@@ -44,6 +53,7 @@ __all__ = [
     "configure_scene_for_holodeck_render",
     "create_server",
     "deploy_player",
+    "split_animation_and_still_frames",
     "write_manifest_from_frames",
-    "write_markers_only_manifest_from_frames",
+    "write_stills_only_manifest_from_frames",
 ]

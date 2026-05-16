@@ -54,7 +54,7 @@ class TestBlenderRenderOverrides:
 
         assert rendered_frames == ["0001.avif", "0003.avif"]
 
-    def test_render_blend_accepts_render_engine_override(self, tmp_path):
+    def test_render_blend_accepts_renderer_overrides(self, tmp_path):
         blend_file = copy_blend_fixture("open_exr_output.blend", tmp_path)
         output_dir = tmp_path / "render-output"
 
@@ -62,7 +62,8 @@ class TestBlenderRenderOverrides:
             blend_file=blend_file,
             output_dir=output_dir,
             blender_executable=BLENDER_PATH,
-            render_engine="workbench",
+            animation_renderer="workbench",
+            still_renderer="workbench",
         )
 
         rendered_frames = sorted((output_dir / "render").glob("*.avif"))

@@ -9,7 +9,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .render_settings import RENDER_ENGINE_CHOICES
+from .render_settings import (
+    DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE,
+    DEFAULT_STILL_RESOLUTION_PERCENTAGE,
+    RENDERER_CHOICES,
+)
 from .runtime import get_package_path, get_package_root
 
 
@@ -87,35 +91,51 @@ def render_blend(
     output_dir: Path,
     blender_executable: str = "blender",
     scene: str | None = None,
-    res_pct: int = 100,
-    render_engine: str | None = None,
+    animation_res_pct: int = DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE,
+    still_res_pct: int = DEFAULT_STILL_RESOLUTION_PERCENTAGE,
+    animation_renderer: str | None = None,
+    still_renderer: str | None = None,
     frames: str | None = None,
-    markers_only: bool = False,
+    stills_only: bool = False,
 ) -> None:
     """Render frames for a blend file into the output directory."""
     selected_frame_modes = [
         mode
         for mode, enabled in (
             ("frames", bool(frames)),
-            ("markers_only", markers_only),
+            ("stills_only", stills_only),
         )
         if enabled
     ]
     if len(selected_frame_modes) > 1:
         raise ValueError(f"Cannot combine frame selection modes: {', '.join(selected_frame_modes)}.")
-    if render_engine is not None and render_engine not in RENDER_ENGINE_CHOICES:
-        choices = ", ".join(RENDER_ENGINE_CHOICES)
-        raise ValueError(f"Render engine must be one of: {choices}.")
+    if animation_res_pct <= 0:
+        raise ValueError("Animation resolution percentage must be a positive integer.")
+    if still_res_pct <= 0:
+        raise ValueError("Still resolution percentage must be a positive integer.")
+    for renderer in (animation_renderer, still_renderer):
+        if renderer is not None and renderer not in RENDERER_CHOICES:
+            choices = ", ".join(RENDERER_CHOICES)
+            raise ValueError(f"Renderer must be one of: {choices}.")
 
-    script_args = ["--output", str(output_dir), "--res-pct", str(res_pct)]
+    script_args = [
+        "--output",
+        str(output_dir),
+        "--animation-res-pct",
+        str(animation_res_pct),
+        "--still-res-pct",
+        str(still_res_pct),
+    ]
     if scene:
         script_args.extend(["--scene", scene])
-    if render_engine:
-        script_args.extend(["--render-engine", render_engine])
+    if animation_renderer:
+        script_args.extend(["--animation-renderer", animation_renderer])
+    if still_renderer:
+        script_args.extend(["--still-renderer", still_renderer])
     if frames:
         script_args.extend(["--frames", frames])
-    if markers_only:
-        script_args.append("--markers-only")
+    if stills_only:
+        script_args.append("--stills-only")
 
     run_blender_script(
         blend_file=blend_file,
