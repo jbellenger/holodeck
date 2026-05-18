@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from .exporter import DEFAULT_MANIFEST_FILENAME
 from .manifest_generator import ManifestGenerator
@@ -15,6 +15,7 @@ from .manifest_generator import ManifestGenerator
 
 DEFAULT_ANIMATION_SCALE_PERCENTAGE = 100
 SOURCE_RENDER_DIRNAME = "render-source"
+ProgressLogger = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ def preserve_and_scale_animation_frames(
     render_frame_paths: Iterable[Path],
     output_dir: Path,
     animation_scale_pct: int,
+    progress_logger: ProgressLogger | None = None,
 ) -> FrameScaleResult:
     """Copy full-size render outputs to render-source/, then scale render/ copies."""
     validate_animation_scale_percentage(animation_scale_pct)
@@ -63,6 +65,7 @@ def preserve_and_scale_animation_frames(
             render_frame_paths=render_paths,
             output_dir=output_dir,
             animation_scale_pct=animation_scale_pct,
+            progress_logger=progress_logger,
         )
 
     return FrameScaleResult(frame_count=len(render_paths))
@@ -72,6 +75,7 @@ def rescale_animation_frames_from_manifest(
     *,
     output_dir: Path,
     animation_scale_pct: int,
+    progress_logger: ProgressLogger | None = None,
 ) -> FrameScaleResult:
     """Regenerate playable animation frames from render-source/ without Blender."""
     validate_animation_scale_percentage(animation_scale_pct)
@@ -88,6 +92,7 @@ def rescale_animation_frames_from_manifest(
         render_frame_paths=frame_paths,
         output_dir=output_dir,
         animation_scale_pct=animation_scale_pct,
+        progress_logger=progress_logger,
     )
     _rewrite_manifest_token(manifest_path, manifest, output_dir)
     return FrameScaleResult(frame_count=len(frame_paths), manifest_path=manifest_path)
@@ -121,6 +126,7 @@ def _write_frames_from_sources(
     render_frame_paths: Iterable[Path],
     output_dir: Path,
     animation_scale_pct: int,
+    progress_logger: ProgressLogger | None = None,
 ) -> None:
     render_paths = [Path(path) for path in render_frame_paths]
     missing_sources = [
@@ -142,6 +148,7 @@ def _write_frames_from_sources(
         render_frame_paths=render_paths,
         output_dir=output_dir,
         animation_scale_pct=animation_scale_pct,
+        progress_logger=progress_logger,
     )
 
 
@@ -150,9 +157,12 @@ def _write_scaled_frames_from_sources(
     render_frame_paths: Iterable[Path],
     output_dir: Path,
     animation_scale_pct: int,
+    progress_logger: ProgressLogger | None = None,
 ) -> None:
     Image = _load_pillow_image_module()
-    for render_path in render_frame_paths:
+    render_paths = [Path(path) for path in render_frame_paths]
+    total_frames = len(render_paths)
+    for frame_index, render_path in enumerate(render_paths, start=1):
         source_path = source_path_for_render_path(render_path, output_dir)
         with Image.open(source_path) as image:
             width = max(1, image.width * animation_scale_pct // 100)
@@ -162,6 +172,15 @@ def _write_scaled_frames_from_sources(
                 resized,
                 render_path,
                 image_format=image.format,
+            )
+        if progress_logger is not None:
+            progress_logger(
+                _format_scale_progress_message(
+                    render_path,
+                    animation_scale_pct=animation_scale_pct,
+                    frame_index=frame_index,
+                    total_frames=total_frames,
+                )
             )
 
 
@@ -216,3 +235,24 @@ def _format_missing_frames_message(frame_label: str, frame_paths: Iterable[Path]
     if len(missing_frames) > 3:
         preview += ", ..."
     return f"Missing {len(missing_frames)} {frame_label}(s): {preview}"
+
+
+def _format_scale_progress_message(
+    render_path: Path,
+    *,
+    animation_scale_pct: int,
+    frame_index: int,
+    total_frames: int,
+) -> str:
+    frame_label = _frame_number_label(render_path)
+    return (
+        f"Scaled animation frame {frame_label} "
+        f"to {animation_scale_pct}% ({frame_index}/{total_frames})"
+    )
+
+
+def _frame_number_label(render_path: Path) -> str:
+    frame_number = Path(render_path).stem
+    if frame_number.isdigit():
+        return str(int(frame_number))
+    return frame_number

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from .frame_scaling import (
     DEFAULT_ANIMATION_SCALE_PERCENTAGE,
@@ -103,6 +104,7 @@ def render_blend(
     still_renderer: str | None = None,
     frames: str | None = None,
     stills_only: bool = False,
+    progress_logger: Callable[[str], None] | None = None,
 ) -> None:
     """Render frames for a blend file into the output directory."""
     selected_frame_modes = [
@@ -159,6 +161,7 @@ def render_blend(
             render_summary_path,
             output_dir=output_dir,
             animation_scale_pct=animation_scale_pct,
+            progress_logger=progress_logger,
         )
 
 
@@ -167,6 +170,7 @@ def _preserve_and_scale_rendered_animation_frames(
     *,
     output_dir: Path,
     animation_scale_pct: int,
+    progress_logger: Callable[[str], None] | None = None,
 ) -> None:
     payload = json.loads(render_summary_path.read_text(encoding="utf-8"))
     still_frame_names = {
@@ -182,6 +186,7 @@ def _preserve_and_scale_rendered_animation_frames(
         render_frame_paths=animation_frame_paths,
         output_dir=output_dir,
         animation_scale_pct=animation_scale_pct,
+        progress_logger=progress_logger,
     )
 
 

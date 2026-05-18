@@ -67,6 +67,30 @@ def test_preserve_and_scale_animation_frames_from_render_outputs(tmp_path):
     assert read_size(render_frame) == (5, 3)
 
 
+def test_preserve_logs_each_scaled_frame_with_progress(tmp_path):
+    output_dir = tmp_path / "dist"
+    render_dir = output_dir / "render"
+    render_frames = [
+        render_dir / "0002.avif",
+        render_dir / "0010.avif",
+    ]
+    for render_frame in render_frames:
+        write_avif(render_frame, size=(10, 6))
+    logs = []
+
+    preserve_and_scale_animation_frames(
+        render_frame_paths=render_frames,
+        output_dir=output_dir,
+        animation_scale_pct=50,
+        progress_logger=logs.append,
+    )
+
+    assert logs == [
+        "Scaled animation frame 2 to 50% (1/2)",
+        "Scaled animation frame 10 to 50% (2/2)",
+    ]
+
+
 def test_rescale_restores_from_source_with_byte_copy(tmp_path):
     output_dir = tmp_path / "dist"
     render_dir = output_dir / "render"
@@ -112,16 +136,19 @@ def test_rescale_scales_from_source_and_skips_still_key_frames(tmp_path):
     write_avif(render_dir / "0003.avif", size=(12, 8))
     write_avif(source_dir / "0002.avif", size=(12, 8), color=(200, 50, 50))
     write_manifest(output_dir, frames=frames, markers=[])
+    logs = []
 
     result = rescale_animation_frames_from_manifest(
         output_dir=output_dir,
         animation_scale_pct=50,
+        progress_logger=logs.append,
     )
 
     assert result.frame_count == 1
     assert read_size(render_dir / "0001.avif") == (12, 8)
     assert read_size(render_dir / "0002.avif") == (6, 4)
     assert read_size(render_dir / "0003.avif") == (12, 8)
+    assert logs == ["Scaled animation frame 2 to 50% (1/1)"]
 
 
 def test_rescale_fails_without_manifest(tmp_path):

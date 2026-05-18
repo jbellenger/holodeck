@@ -314,6 +314,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
         still_renderer=getattr(args, "still_renderer", None),
         frames=getattr(args, "frames", None),
         stills_only=getattr(args, "stills_only", False),
+        progress_logger=print,
     )
 
     print(f"Rendered frames into {output_dir / 'render'}")
@@ -400,6 +401,7 @@ def rescale_frames_command(args: argparse.Namespace) -> int:
     result = rescale_animation_frames_from_manifest(
         output_dir=output_dir,
         animation_scale_pct=args.animation_scale_pct,
+        progress_logger=print,
     )
     print(f"Rescaled {result.frame_count} animation frame(s) in {output_dir / 'render'}")
     if result.manifest_path is not None:

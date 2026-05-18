@@ -100,6 +100,7 @@ class TestRenderFramesCommand:
         assert calls[1][1]["animation_res_pct"] == 60
         assert calls[1][1]["still_res_pct"] == 125
         assert calls[1][1]["animation_scale_pct"] == 75
+        assert calls[1][1]["progress_logger"] is print
 
     def test_passes_title_option_to_player_deploy(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
@@ -209,6 +210,7 @@ class TestRenderFramesCommand:
         assert calls[0]["animation_scale_pct"] == 100
         assert calls[0]["animation_renderer"] is None
         assert calls[0]["still_renderer"] is None
+        assert calls[0]["progress_logger"] is print
 
     def test_passes_renderer_options_through_to_render(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
@@ -598,6 +600,7 @@ class TestRescaleFramesCommand:
             {
                 "output_dir": output_dir.resolve(),
                 "animation_scale_pct": 50,
+                "progress_logger": print,
             }
         ]
         assert "Rescaled 3 animation frame(s)" in captured.out
