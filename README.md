@@ -65,14 +65,15 @@ holodeck build path/to/deck.blend dist --title "My Deck"
 
 `build` renders the frames, writes `manifest.json`, and installs the browser
 player assets into the output directory. The result is a static site that can be
-served locally or uploaded to a static host. By default, Holodeck renders the
-animation at 50% resolution, then renders the first, marker, and last frames at
-100% resolution over the same filenames.
+served locally or uploaded to a static host. By default, Holodeck renders both
+animation frames and the first, marker, and last frames at 100% resolution over
+the same filenames.
 
 Useful build options:
 
 - `--scene` renders a specific Blender scene instead of the active scene.
-- `--animation-res-pct` sets the resolution percentage for animation frames. The default is 50.
+- `--animation-res-pct` sets the Blender render resolution percentage for animation frames. The default is 100.
+- `--animation-scale-pct` scales animation frames after rendering while preserving full-size originals in `render-source/`. The default is 100.
 - `--still-res-pct` sets the resolution percentage for first, marker, and last frames. The default is 100.
 - `--animation-renderer` overrides the Blend file renderer for animation frames.
 - `--still-renderer` overrides the Blend file renderer for first, marker, and last frames.
@@ -139,10 +140,12 @@ hosting or serve it through CloudFront:
 aws s3 sync dist s3://your-bucket/path/ \
   --exclude "*" \
   --include "render/*" \
+  --include "render-source/*" \
   --cache-control "public, max-age=31536000, immutable"
 
 aws s3 sync dist s3://your-bucket/path/ \
   --exclude "render/*" \
+  --exclude "render-source/*" \
   --cache-control "no-cache"
 ```
 
@@ -188,5 +191,31 @@ needs more visual polish:
 holodeck render-frames path/to/deck.blend dist --frames "48,72-96" --animation-renderer cycles
 ```
 
-You can also omit either renderer flag when the `.blend` file already has the
-desired renderer selected for that pass.
+## Rescale Animation Frames Without Rerendering
+Use `--animation-scale-pct` when you want Blender to render animation frames at
+full resolution, but ship smaller animation frames in the browser bundle:
+
+```bash
+holodeck build path/to/deck.blend dist --animation-scale-pct 50
+```
+
+This is particularly useful for:
+- long decks
+- animation heavy decks
+- high fps decks
+- eevee-rendered decks
+
+This is similar to `--animation-res-pct` in that they can both reduce the download size of animation frames, but different in some key ways. While `--animation-res-pct` can significantly improve render times, it can produce visible artifacts in eevee-rendered decks when transitioning. `--animation-res-pct` is immune from visible artifacts in eevee, but at the cost of significantly slower render times.
+
+Holodeck stores full-size animation frame sources in `render-source/` using the
+same filenames as `render/`. To regenerate playable animation frames from those
+preserved sources without opening Blender, run:
+
+```bash
+holodeck rescale-frames dist --animation-scale-pct 75
+holodeck rescale-frames dist --animation-scale-pct 100
+```
+
+The `100` form restores animation frames by copying the preserved source bytes
+back into `render/`. Rescaling uses `manifest.json` to leave first, marker, and
+last still frames untouched.

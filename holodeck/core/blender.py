@@ -9,6 +9,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .frame_scaling import (
+    DEFAULT_ANIMATION_SCALE_PERCENTAGE,
+    preserve_and_scale_animation_frames,
+    validate_animation_scale_percentage,
+)
 from .render_settings import (
     DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE,
     DEFAULT_STILL_RESOLUTION_PERCENTAGE,
@@ -93,6 +98,7 @@ def render_blend(
     scene: str | None = None,
     animation_res_pct: int = DEFAULT_ANIMATION_RESOLUTION_PERCENTAGE,
     still_res_pct: int = DEFAULT_STILL_RESOLUTION_PERCENTAGE,
+    animation_scale_pct: int = DEFAULT_ANIMATION_SCALE_PERCENTAGE,
     animation_renderer: str | None = None,
     still_renderer: str | None = None,
     frames: str | None = None,
@@ -113,6 +119,7 @@ def render_blend(
         raise ValueError("Animation resolution percentage must be a positive integer.")
     if still_res_pct <= 0:
         raise ValueError("Still resolution percentage must be a positive integer.")
+    validate_animation_scale_percentage(animation_scale_pct)
     for renderer in (animation_renderer, still_renderer):
         if renderer is not None and renderer not in RENDERER_CHOICES:
             choices = ", ".join(RENDERER_CHOICES)
@@ -137,11 +144,44 @@ def render_blend(
     if stills_only:
         script_args.append("--stills-only")
 
-    run_blender_script(
-        blend_file=blend_file,
-        script_name="render_frames.py",
-        blender_executable=blender_executable,
-        script_args=script_args,
+    with tempfile.TemporaryDirectory(prefix="holodeck-render-") as temp_dir:
+        render_summary_path = Path(temp_dir) / "render-summary.json"
+        script_args.extend(["--render-summary-json", str(render_summary_path)])
+
+        run_blender_script(
+            blend_file=blend_file,
+            script_name="render_frames.py",
+            blender_executable=blender_executable,
+            script_args=script_args,
+        )
+
+        _preserve_and_scale_rendered_animation_frames(
+            render_summary_path,
+            output_dir=output_dir,
+            animation_scale_pct=animation_scale_pct,
+        )
+
+
+def _preserve_and_scale_rendered_animation_frames(
+    render_summary_path: Path,
+    *,
+    output_dir: Path,
+    animation_scale_pct: int,
+) -> None:
+    payload = json.loads(render_summary_path.read_text(encoding="utf-8"))
+    still_frame_names = {
+        Path(path).name
+        for path in payload.get("still_frame_paths", [])
+    }
+    animation_frame_paths = [
+        Path(path)
+        for path in payload.get("animation_frame_paths", [])
+        if Path(path).name not in still_frame_names
+    ]
+    preserve_and_scale_animation_frames(
+        render_frame_paths=animation_frame_paths,
+        output_dir=output_dir,
+        animation_scale_pct=animation_scale_pct,
     )
 
 

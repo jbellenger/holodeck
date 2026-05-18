@@ -69,6 +69,8 @@ def build_pyinstaller_command(repo_root: Path, pyinstaller: Path, dist_dir: Path
         str(build_dir / "spec"),
         "--paths",
         str(repo_root),
+        "--hidden-import",
+        "pillow_avif",
     ]
 
     for source, destination in get_add_data_entries(repo_root):

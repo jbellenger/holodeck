@@ -55,4 +55,7 @@ class TestBuildExecutableScript:
         add_data_flag = module.format_add_data(repo_root / "holodeck", "holodeck")
         assert command[:2] == [str(pyinstaller), "--noconfirm"]
         assert command[-1] == str(repo_root / "scripts" / "run_holodeck.py")
+        assert ["--hidden-import", "pillow_avif"] == command[
+            command.index("--hidden-import") : command.index("--hidden-import") + 2
+        ]
         assert ["--add-data", add_data_flag] == command[command.index("--add-data") : command.index("--add-data") + 2]

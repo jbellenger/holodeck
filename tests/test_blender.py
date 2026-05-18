@@ -14,6 +14,22 @@ from holodeck.core.blender import (
 )
 
 
+def write_empty_render_summary(script_args):
+    if "--render-summary-json" in script_args:
+        summary_path = Path(script_args[script_args.index("--render-summary-json") + 1])
+        summary_path.write_text(
+            json.dumps({"animation_frame_paths": [], "still_frame_paths": []}),
+            encoding="utf-8",
+        )
+
+
+def without_render_summary(script_args):
+    if "--render-summary-json" not in script_args:
+        return script_args
+    index = script_args.index("--render-summary-json")
+    return script_args[:index] + script_args[index + 2 :]
+
+
 class TestResolveBlenderExecutable:
     def test_raises_when_blender_is_missing(self, monkeypatch):
         monkeypatch.setattr("holodeck.core.blender.shutil.which", lambda _: None)
@@ -79,6 +95,7 @@ class TestRenderBlend:
 
         def fake_run_blender_script(**kwargs):
             captured.update(kwargs)
+            write_empty_render_summary(kwargs["script_args"])
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
@@ -92,7 +109,7 @@ class TestRenderBlend:
 
         assert captured["blend_file"] == blend_file
         assert captured["script_name"] == "render_frames.py"
-        assert captured["script_args"] == [
+        assert without_render_summary(captured["script_args"]) == [
             "--output",
             str(output_dir),
             "--animation-res-pct",
@@ -111,16 +128,17 @@ class TestRenderBlend:
 
         def fake_run_blender_script(**kwargs):
             captured.update(kwargs)
+            write_empty_render_summary(kwargs["script_args"])
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
         render_blend(blend_file=blend_file, output_dir=output_dir, frames="1,4-6")
 
-        assert captured["script_args"] == [
+        assert without_render_summary(captured["script_args"]) == [
             "--output",
             str(output_dir),
             "--animation-res-pct",
-            "50",
+            "100",
             "--still-res-pct",
             "100",
             "--frames",
@@ -135,13 +153,15 @@ class TestRenderBlend:
 
         def fake_run_blender_script(**kwargs):
             captured.update(kwargs)
+            write_empty_render_summary(kwargs["script_args"])
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
         render_blend(blend_file=blend_file, output_dir=output_dir)
 
-        assert "--frames" not in captured["script_args"]
-        assert "--stills-only" not in captured["script_args"]
+        filtered_args = without_render_summary(captured["script_args"])
+        assert "--frames" not in filtered_args
+        assert "--stills-only" not in filtered_args
 
     def test_forwards_stills_only_option(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
@@ -151,16 +171,17 @@ class TestRenderBlend:
 
         def fake_run_blender_script(**kwargs):
             captured.update(kwargs)
+            write_empty_render_summary(kwargs["script_args"])
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
         render_blend(blend_file=blend_file, output_dir=output_dir, stills_only=True)
 
-        assert captured["script_args"] == [
+        assert without_render_summary(captured["script_args"]) == [
             "--output",
             str(output_dir),
             "--animation-res-pct",
-            "50",
+            "100",
             "--still-res-pct",
             "100",
             "--stills-only",
@@ -174,6 +195,7 @@ class TestRenderBlend:
 
         def fake_run_blender_script(**kwargs):
             captured.update(kwargs)
+            write_empty_render_summary(kwargs["script_args"])
 
         monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
 
@@ -184,11 +206,11 @@ class TestRenderBlend:
             still_renderer="cycles",
         )
 
-        assert captured["script_args"] == [
+        assert without_render_summary(captured["script_args"]) == [
             "--output",
             str(output_dir),
             "--animation-res-pct",
-            "50",
+            "100",
             "--still-res-pct",
             "100",
             "--animation-renderer",
@@ -245,6 +267,61 @@ class TestRenderBlend:
                 output_dir=output_dir,
                 still_res_pct=0,
             )
+
+    def test_rejects_out_of_range_animation_scale(self, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(ValueError, match="Animation scale"):
+            render_blend(
+                blend_file=blend_file,
+                output_dir=output_dir,
+                animation_scale_pct=101,
+            )
+
+    def test_preserves_and_scales_non_still_animation_frames(self, monkeypatch, tmp_path):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+        render_dir = output_dir / "render"
+        render_dir.mkdir(parents=True)
+        (render_dir / "0001.avif").write_bytes(b"still")
+        (render_dir / "0002.avif").write_bytes(b"animation")
+        captured = {}
+
+        def fake_run_blender_script(**kwargs):
+            script_args = kwargs["script_args"]
+            summary_path = Path(script_args[script_args.index("--render-summary-json") + 1])
+            payload = {
+                "animation_frame_paths": [
+                    str(render_dir / "0001.avif"),
+                    str(render_dir / "0002.avif"),
+                ],
+                "still_frame_paths": [
+                    str(render_dir / "0001.avif"),
+                ],
+            }
+            summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        def fake_preserve_and_scale_animation_frames(**kwargs):
+            captured.update(kwargs)
+
+        monkeypatch.setattr("holodeck.core.blender.run_blender_script", fake_run_blender_script)
+        monkeypatch.setattr(
+            "holodeck.core.blender.preserve_and_scale_animation_frames",
+            fake_preserve_and_scale_animation_frames,
+        )
+
+        render_blend(
+            blend_file=blend_file,
+            output_dir=output_dir,
+            animation_scale_pct=50,
+        )
+
+        assert captured["render_frame_paths"] == [render_dir / "0002.avif"]
+        assert captured["output_dir"] == output_dir
+        assert captured["animation_scale_pct"] == 50
 
 
 class TestExtractBlendMetadata:

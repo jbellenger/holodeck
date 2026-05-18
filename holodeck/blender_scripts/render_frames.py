@@ -1,6 +1,7 @@
 """Render frames for a blend file into a Holodeck output directory."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -60,6 +61,10 @@ def parse_args(argv):
         "--stills-only",
         action="store_true",
         help="Render only first, timeline marker, and last frames.",
+    )
+    parser.add_argument(
+        "--render-summary-json",
+        help="Optional path to write rendered animation/still frame paths for post-processing.",
     )
     return parser.parse_args(argv)
 
@@ -126,6 +131,15 @@ def main(argv):
     )
     _render_frames(scene, render_dir, still_pass_frames)
 
+    if args.render_summary_json:
+        _write_render_summary(
+            args.render_summary_json,
+            scene,
+            render_dir=render_dir,
+            animation_frames=animation_frames,
+            still_pass_frames=still_pass_frames,
+        )
+
 
 def _configure_render_pass(
     scene,
@@ -155,6 +169,30 @@ def _render_frames(scene, render_dir, frames):
         scene.frame_set(frame)
         scene.render.filepath = f"{render_dir}/{frame:04d}"
         bpy.ops.render.render(write_still=True, scene=scene.name)
+
+
+def _write_render_summary(json_output, scene, *, render_dir, animation_frames, still_pass_frames):
+    scene.render.filepath = str(render_dir) + "/"
+    payload = {
+        "animation_frame_paths": [
+            scene.render.frame_path(frame=frame)
+            for frame in _expanded_frame_numbers(scene, animation_frames)
+        ],
+        "still_frame_paths": [
+            scene.render.frame_path(frame=frame)
+            for frame in _expanded_frame_numbers(scene, still_pass_frames)
+        ],
+    }
+
+    json_output_path = Path(json_output).expanduser().resolve()
+    json_output_path.parent.mkdir(parents=True, exist_ok=True)
+    json_output_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _expanded_frame_numbers(scene, frames):
+    if frames is None:
+        return list(range(scene.frame_start, scene.frame_end + 1))
+    return list(frames)
 
 
 def _timeline_marker_frames(scene):

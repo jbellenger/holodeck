@@ -6,6 +6,8 @@ import shutil
 from pathlib import Path
 
 import pytest
+import pillow_avif  # noqa: F401
+from PIL import Image
 
 from holodeck.core.blender import extract_blend_metadata, render_blend
 
@@ -22,6 +24,11 @@ def copy_blend_fixture(name: str, tmp_path: Path) -> Path:
     destination = tmp_path / name
     shutil.copyfile(source, destination)
     return destination
+
+
+def image_size(path: Path) -> tuple[int, int]:
+    with Image.open(path) as image:
+        return image.size
 
 
 class TestBlenderRenderOverrides:
@@ -69,6 +76,26 @@ class TestBlenderRenderOverrides:
         rendered_frames = sorted((output_dir / "render").glob("*.avif"))
 
         assert len(rendered_frames) == 3
+
+    def test_render_blend_preserves_sources_and_scales_animation_frames(self, tmp_path):
+        blend_file = copy_blend_fixture("open_exr_output.blend", tmp_path)
+        output_dir = tmp_path / "render-output"
+
+        render_blend(
+            blend_file=blend_file,
+            output_dir=output_dir,
+            blender_executable=BLENDER_PATH,
+            animation_scale_pct=50,
+        )
+
+        render_dir = output_dir / "render"
+        source_dir = output_dir / "render-source"
+
+        assert sorted(p.name for p in source_dir.glob("*.avif")) == ["0002.avif"]
+        assert image_size(source_dir / "0002.avif") == (64, 64)
+        assert image_size(render_dir / "0001.avif") == (64, 64)
+        assert image_size(render_dir / "0002.avif") == (32, 32)
+        assert image_size(render_dir / "0003.avif") == (64, 64)
 
     def test_extract_blend_metadata_uses_holodeck_render_paths(self, tmp_path):
         blend_file = copy_blend_fixture("named_png_output.blend", tmp_path)

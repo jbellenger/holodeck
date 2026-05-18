@@ -7,6 +7,10 @@ name = "holodeck"
 version = "1.0.0"
 description = "CLI tool for rendering Blender presentations into static Holodeck bundles."
 requires-python = ">=3.11"
+dependencies = [
+    "Pillow",
+    "pillow-avif-plugin",
+]
 
 [project.optional-dependencies]
 build = ["pex", "pyinstaller>=6.11"]

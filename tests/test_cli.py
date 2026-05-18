@@ -19,9 +19,11 @@ class TestCliHelp:
         assert "usage: holodeck render-frames" in captured.out
         assert "usage: holodeck refresh" in captured.out
         assert "usage: holodeck build" in captured.out
+        assert "usage: holodeck rescale-frames" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
         assert "--animation-res-pct ANIMATION_RES_PCT" in captured.out
+        assert "--animation-scale-pct ANIMATION_SCALE_PCT" in captured.out
         assert "--still-res-pct STILL_RES_PCT" in captured.out
         assert "--res-pct" not in captured.out
         assert "--animation-renderer {eevee,cycles,workbench}" in captured.out
@@ -45,9 +47,11 @@ class TestCliHelp:
         assert "usage: holodeck render-frames" in captured.out
         assert "usage: holodeck refresh" in captured.out
         assert "usage: holodeck build" in captured.out
+        assert "usage: holodeck rescale-frames" in captured.out
         assert "usage: holodeck serve" in captured.out
         assert "--blender BLENDER" in captured.out
         assert "--animation-res-pct ANIMATION_RES_PCT" in captured.out
+        assert "--animation-scale-pct ANIMATION_SCALE_PCT" in captured.out
         assert "--still-res-pct STILL_RES_PCT" in captured.out
         assert "--res-pct" not in captured.out
         assert "--animation-renderer {eevee,cycles,workbench}" in captured.out
@@ -84,6 +88,8 @@ class TestRenderFramesCommand:
                 "60",
                 "--still-res-pct",
                 "125",
+                "--animation-scale-pct",
+                "75",
             ]
         )
 
@@ -93,6 +99,7 @@ class TestRenderFramesCommand:
         assert calls[1][1]["blend_file"] == blend_file.resolve()
         assert calls[1][1]["animation_res_pct"] == 60
         assert calls[1][1]["still_res_pct"] == 125
+        assert calls[1][1]["animation_scale_pct"] == 75
 
     def test_passes_title_option_to_player_deploy(self, monkeypatch, tmp_path):
         blend_file = tmp_path / "demo.blend"
@@ -136,6 +143,18 @@ class TestRenderFramesCommand:
         captured = capsys.readouterr()
         assert exc_info.value.code == 2
         assert "must be a positive integer" in captured.err
+
+    def test_rejects_out_of_range_animation_scale_percentage(self, tmp_path, capsys):
+        blend_file = tmp_path / "demo.blend"
+        blend_file.touch()
+        output_dir = tmp_path / "dist"
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["render-frames", str(blend_file), str(output_dir), "--animation-scale-pct", "101"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "must be between 1 and 100" in captured.err
 
     def test_rejects_removed_res_pct_option(self, tmp_path, capsys):
         blend_file = tmp_path / "demo.blend"
@@ -185,8 +204,9 @@ class TestRenderFramesCommand:
         assert exit_code == 0
         assert calls[0]["frames"] is None
         assert calls[0]["stills_only"] is False
-        assert calls[0]["animation_res_pct"] == 50
+        assert calls[0]["animation_res_pct"] == 100
         assert calls[0]["still_res_pct"] == 100
+        assert calls[0]["animation_scale_pct"] == 100
         assert calls[0]["animation_renderer"] is None
         assert calls[0]["still_renderer"] is None
 
@@ -403,6 +423,7 @@ class TestBuildCommand:
                     args.output_dir,
                     args.animation_res_pct,
                     args.still_res_pct,
+                    args.animation_scale_pct,
                 )
             )
             or 0,
@@ -416,6 +437,7 @@ class TestBuildCommand:
                     args.output_dir,
                     args.animation_res_pct,
                     args.still_res_pct,
+                    args.animation_scale_pct,
                     stills_only,
                 )
             )
@@ -431,13 +453,15 @@ class TestBuildCommand:
                 "40",
                 "--still-res-pct",
                 "150",
+                "--animation-scale-pct",
+                "50",
             ]
         )
 
         assert exit_code == 0
         assert calls == [
-            ("render", str(blend_file), str(output_dir), 40, 150),
-            ("manifest", str(blend_file), str(output_dir), 40, 150, False),
+            ("render", str(blend_file), str(output_dir), 40, 150, 50),
+            ("manifest", str(blend_file), str(output_dir), 40, 150, 50, False),
         ]
 
     def test_propagates_stills_only_to_render_and_private_refresh(self, monkeypatch, tmp_path):
@@ -547,6 +571,57 @@ class TestBuildCommand:
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["frames"] == ["render/0001.png", "render/0003.png", "render/0004.png"]
         assert manifest["markers"] == [0, 1, 2]
+
+
+class TestRescaleFramesCommand:
+    def test_rescales_frames_from_existing_output(self, monkeypatch, tmp_path, capsys):
+        output_dir = tmp_path / "dist"
+        output_dir.mkdir()
+        calls = []
+
+        def fake_rescale_animation_frames_from_manifest(**kwargs):
+            calls.append(kwargs)
+            return type("Result", (), {"frame_count": 3, "manifest_path": output_dir / "manifest.json"})()
+
+        monkeypatch.setattr(
+            "holodeck.cli.rescale_animation_frames_from_manifest",
+            fake_rescale_animation_frames_from_manifest,
+        )
+
+        exit_code = main(
+            ["rescale-frames", str(output_dir), "--animation-scale-pct", "50"]
+        )
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert calls == [
+            {
+                "output_dir": output_dir.resolve(),
+                "animation_scale_pct": 50,
+            }
+        ]
+        assert "Rescaled 3 animation frame(s)" in captured.out
+        assert "Updated" in captured.out
+
+    def test_rejects_out_of_range_animation_scale(self, tmp_path, capsys):
+        output_dir = tmp_path / "dist"
+        output_dir.mkdir()
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["rescale-frames", str(output_dir), "--animation-scale-pct", "101"])
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert "must be between 1 and 100" in captured.err
+
+    def test_fails_when_output_dir_is_missing(self, tmp_path, capsys):
+        exit_code = main(
+            ["rescale-frames", str(tmp_path / "missing"), "--animation-scale-pct", "50"]
+        )
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Output directory not found" in captured.err
 
 
 class TestServeCommand:

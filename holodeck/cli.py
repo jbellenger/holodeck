@@ -16,9 +16,11 @@ from .core import (
     extract_blend_metadata,
     get_player_url,
     render_blend,
+    rescale_animation_frames_from_manifest,
     write_manifest_from_frames,
     write_stills_only_manifest_from_frames,
 )
+from .core.frame_scaling import DEFAULT_ANIMATION_SCALE_PERCENTAGE
 from .core.frame_selection import canonical_still_frames
 from .core.frame_spec import parse_frame_spec
 from .core.render_settings import (
@@ -87,6 +89,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_parser.set_defaults(func=build_command)
     command_parsers.append(build_parser)
+
+    rescale_parser = subparsers.add_parser(
+        "rescale-frames",
+        help="Rescale rendered animation frames from preserved source frames.",
+        description="Rescale rendered animation frames from preserved source frames.",
+    )
+    rescale_parser.add_argument("output_dir", help="Holodeck output directory to update.")
+    rescale_parser.add_argument(
+        "--animation-scale-pct",
+        type=_scale_percentage,
+        required=True,
+        help="Post-render scale percentage for animation frames.",
+    )
+    rescale_parser.set_defaults(func=rescale_frames_command)
+    command_parsers.append(rescale_parser)
 
     serve_parser = subparsers.add_parser(
         "serve",
@@ -207,6 +224,13 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _scale_percentage(value: str) -> int:
+    parsed = _positive_int(value)
+    if parsed > 100:
+        raise argparse.ArgumentTypeError("must be between 1 and 100")
+    return parsed
+
+
 def _frame_spec(value: str) -> str:
     try:
         parse_frame_spec(value)
@@ -227,6 +251,12 @@ def _add_render_arguments(parser: argparse.ArgumentParser) -> None:
         type=_positive_int,
         default=DEFAULT_STILL_RESOLUTION_PERCENTAGE,
         help="Resolution percentage for first, marker, and last frames.",
+    )
+    parser.add_argument(
+        "--animation-scale-pct",
+        type=_scale_percentage,
+        default=DEFAULT_ANIMATION_SCALE_PERCENTAGE,
+        help="Post-render scale percentage for animation frames.",
     )
     parser.add_argument(
         "--animation-renderer",
@@ -279,6 +309,7 @@ def render_frames_command(args: argparse.Namespace) -> int:
         scene=args.scene,
         animation_res_pct=args.animation_res_pct,
         still_res_pct=args.still_res_pct,
+        animation_scale_pct=args.animation_scale_pct,
         animation_renderer=getattr(args, "animation_renderer", None),
         still_renderer=getattr(args, "still_renderer", None),
         frames=getattr(args, "frames", None),
@@ -361,6 +392,18 @@ def _deploy_player(output_dir: Path, args: argparse.Namespace) -> None:
 def build_command(args: argparse.Namespace) -> int:
     render_frames_command(args)
     _refresh_output(args, stills_only=getattr(args, "stills_only", False))
+    return 0
+
+
+def rescale_frames_command(args: argparse.Namespace) -> int:
+    output_dir = _ensure_output_dir(args.output_dir)
+    result = rescale_animation_frames_from_manifest(
+        output_dir=output_dir,
+        animation_scale_pct=args.animation_scale_pct,
+    )
+    print(f"Rescaled {result.frame_count} animation frame(s) in {output_dir / 'render'}")
+    if result.manifest_path is not None:
+        print(f"Updated {result.manifest_path}")
     return 0
 
 
