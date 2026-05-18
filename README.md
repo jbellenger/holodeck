@@ -214,8 +214,11 @@ preserved sources without opening Blender, run:
 ```bash
 holodeck rescale-frames dist --animation-scale-pct 75
 holodeck rescale-frames dist --animation-scale-pct 100
+holodeck rescale-frames dist --animation-scale-pct 75 --title "My Deck"
 ```
 
 The `100` form restores animation frames by copying the preserved source bytes
 back into `render/`. Rescaling uses `manifest.json` to leave first, marker, and
-last still frames untouched.
+last still frames untouched. If `--title` is supplied, `rescale-frames` also
+rewrites the generated player page title; otherwise it leaves the existing
+player files alone.

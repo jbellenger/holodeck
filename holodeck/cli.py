@@ -102,6 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Post-render scale percentage for animation frames.",
     )
+    _add_player_arguments(rescale_parser)
     rescale_parser.set_defaults(func=rescale_frames_command)
     command_parsers.append(rescale_parser)
 
@@ -403,6 +404,9 @@ def rescale_frames_command(args: argparse.Namespace) -> int:
         animation_scale_pct=args.animation_scale_pct,
         progress_logger=print,
     )
+    title = getattr(args, "title", None)
+    if title is not None:
+        deploy_player(output_dir, title=title)
     print(f"Rescaled {result.frame_count} animation frame(s) in {output_dir / 'render'}")
     if result.manifest_path is not None:
         print(f"Updated {result.manifest_path}")

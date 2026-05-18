@@ -606,6 +606,61 @@ class TestRescaleFramesCommand:
         assert "Rescaled 3 animation frame(s)" in captured.out
         assert "Updated" in captured.out
 
+    def test_passes_title_option_to_player_deploy(self, monkeypatch, tmp_path):
+        output_dir = tmp_path / "dist"
+        output_dir.mkdir()
+        calls = []
+
+        monkeypatch.setattr(
+            "holodeck.cli.rescale_animation_frames_from_manifest",
+            lambda **kwargs: type(
+                "Result",
+                (),
+                {"frame_count": 3, "manifest_path": output_dir / "manifest.json"},
+            )(),
+        )
+        monkeypatch.setattr(
+            "holodeck.cli.deploy_player",
+            lambda path, title=None: calls.append(("deploy", path, title)),
+        )
+
+        exit_code = main(
+            [
+                "rescale-frames",
+                str(output_dir),
+                "--animation-scale-pct",
+                "50",
+                "--title",
+                "Demo Deck",
+            ]
+        )
+
+        assert exit_code == 0
+        assert calls == [("deploy", output_dir.resolve(), "Demo Deck")]
+
+    def test_preserves_existing_player_when_title_is_omitted(self, monkeypatch, tmp_path):
+        output_dir = tmp_path / "dist"
+        output_dir.mkdir()
+
+        monkeypatch.setattr(
+            "holodeck.cli.rescale_animation_frames_from_manifest",
+            lambda **kwargs: type(
+                "Result",
+                (),
+                {"frame_count": 3, "manifest_path": output_dir / "manifest.json"},
+            )(),
+        )
+        monkeypatch.setattr(
+            "holodeck.cli.deploy_player",
+            lambda *args, **kwargs: pytest.fail("deploy_player should not run without --title"),
+        )
+
+        exit_code = main(
+            ["rescale-frames", str(output_dir), "--animation-scale-pct", "50"]
+        )
+
+        assert exit_code == 0
+
     def test_rejects_out_of_range_animation_scale(self, tmp_path, capsys):
         output_dir = tmp_path / "dist"
         output_dir.mkdir()
