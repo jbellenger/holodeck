@@ -205,7 +205,7 @@ This is particularly useful for:
 - high fps decks
 - eevee-rendered decks
 
-This is similar to `--animation-res-pct` in that they can both reduce the download size of animation frames, but different in some key ways. While `--animation-res-pct` can significantly improve render times, it can produce visible artifacts in eevee-rendered decks when transitioning. `--animation-res-pct` is immune from visible artifacts in eevee, but at the cost of significantly slower render times.
+This is similar to `--animation-res-pct` in that they can both reduce the download size of animation frames, but different in some key ways. While `--animation-res-pct` can significantly improve render times, it can produce visible artifacts in eevee-rendered decks when transitioning from animated frames to still frames. `--animation-res-pct` is immune from visible artifacts in eevee, but at the cost of significantly slower render times.
 
 Holodeck stores full-size animation frame sources in `render-source/` using the
 same filenames as `render/`. To regenerate playable animation frames from those
